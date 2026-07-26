@@ -128,6 +128,15 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px;}
 .q-tbl td input:focus,.q-tbl td textarea:focus{border-color:var(--gold);}
 .q-tbl td textarea{resize:vertical;min-height:56px;line-height:1.6;}
 .q-tbl td.num-cell{font-weight:700;white-space:nowrap;direction:ltr;text-align:left;padding-top:12px;}
+.q-tbl tr.notes-merge-row{border-bottom:none;}
+.q-tbl tr.notes-merge-row:hover{background:transparent;}
+.notes-merge-btn{
+  width:22px;height:16px;line-height:14px;font-size:12px;padding:0;margin:-1px auto;
+  border:1px solid var(--border);background:#fff;color:var(--mid);border-radius:4px;
+  cursor:pointer;display:block;transition:.15s;
+}
+.notes-merge-btn:hover{border-color:var(--gold);color:var(--gold);}
+.notes-merge-btn.merged{background:var(--gold);color:#fff;border-color:var(--gold);}
 
 .grand-bar{background:var(--dark);color:var(--gold-l);padding:13px 20px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700;margin-bottom:16px;}
 .grand-bar .amt{font-family:'Playfair Display',serif;font-size:22px;color:#F1EFE8;}
@@ -203,8 +212,10 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px;}
 .comm-result b{color:#fff;font-family:'Playfair Display',serif;font-size:15px;}
 .add-section-bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 
-.cat-grand{margin-top:14px;text-align:left;direction:ltr;font-weight:700;color:var(--gold-l);
-  background:var(--dark);padding:11px 16px;border-radius:6px;font-size:15px;}
+.cat-grand{margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  font-weight:700;color:var(--gold-l);background:var(--dark);padding:11px 16px;
+  border-radius:0 0 6px 6px;font-size:14px;}
+.cat-grand .amt{direction:ltr;font-family:'Playfair Display',serif;font-size:17px;color:#fff;}
 
 /* confirm dialog */
 #confirm-modal{display:none;position:fixed;inset:0;background:rgba(44,44,42,.65);z-index:950;justify-content:center;align-items:center;}
@@ -436,7 +447,7 @@ function dollar(){ return $('b-dollar')?.value || $('inp-dollar')?.value || CFG.
    This mirrors the Excel workbook: each sheet (category) has an "أولاً: ..." items block,
    and can have a "ثانياً: نسبة مهندس الإشراف" percentage block (or more item blocks) added on top. */
 const CAT = {
-  newRow(){ return { _id:Math.random(), description:'', unit:'', qty:1, price:0, notes:'' }; },
+  newRow(){ return { _id:Math.random(), description:'', unit:'', qty:1, price:0, notes:'', notesSpan:1 }; },
   newItemsSection(title){ return { _id:Math.random(), type:'items', title: title||'', rows:[ this.newRow() ] }; },
   newCommissionSection(){ return { _id:Math.random(), type:'commission', title:'نسبة مهندس الإشراف', desc:'اشراف هندسي', percent:0, engineerName:'' }; },
   newCategory(name){ return { _id:Math.random(), name: name || 'قسم جديد', sections:[ this.newItemsSection('') ] }; },
@@ -514,6 +525,47 @@ const CAT = {
     const r=s.rows.find(r=>r._id===rowId); if(r){ r[field]=num(val); this.render(); }
   },
 
+  /* ── merge/split notes cells between two consecutive rows (rowspan), like merging cells in Excel ──
+     "boundaryIndex" is the index of the boundary line, sitting right after rows[boundaryIndex] and
+     before rows[boundaryIndex+1]. Each row carries notesSpan: how many rows (incl. itself) its notes
+     cell covers downward; rows covered by a previous rowspan don't render their own notes cell. */
+  _findNotesGroupStart(rows, idx){
+    // find the row that "owns" the merged notes cell covering position idx
+    let i = 0;
+    while(i < rows.length){
+      const span = Math.max(1, Number(rows[i].notesSpan) || 1);
+      if(idx >= i && idx < i + span) return i;
+      i += span;
+    }
+    return idx;
+  },
+  toggleNotesMerge(catId, secId, boundaryIndex){
+    const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
+    const s=c.sections.find(s=>s._id===secId); if(!s) return;
+    const rows = s.rows;
+    if(boundaryIndex < 0 || boundaryIndex+1 >= rows.length) return;
+
+    const startA = this._findNotesGroupStart(rows, boundaryIndex);
+    const startB = this._findNotesGroupStart(rows, boundaryIndex+1);
+
+    if(startA === startB){
+      // already merged across this boundary -> split: the group breaks right after boundaryIndex
+      const ownerSpan = Math.max(1, Number(rows[startA].notesSpan) || 1);
+      const firstPartLen = (boundaryIndex - startA) + 1;
+      rows[startA].notesSpan = firstPartLen;
+      const secondStart = boundaryIndex + 1;
+      const secondLen = ownerSpan - firstPartLen;
+      if(rows[secondStart]) rows[secondStart].notesSpan = secondLen || 1;
+    } else {
+      // merge the group starting at startA with the group starting at startB into one
+      const spanB = Math.max(1, Number(rows[startB].notesSpan) || 1);
+      rows[startA].notesSpan = (boundaryIndex - startA + 1) + spanB;
+      // rows from startB onward that were part of group B no longer own their own span marker
+      // (they'll just be skipped during render since they're covered by rows[startA].notesSpan)
+    }
+    this.render();
+  },
+
   /* ── totals ── */
   rowTotal(r){ return (num(r.qty)||0) * (num(r.price)||0); },
   sectionItemsTotal(section){ return section.rows.reduce((s,r)=>s+this.rowTotal(r),0); },
@@ -542,8 +594,21 @@ const CAT = {
 
   renderItemsSection(cat, section, idx){
     let rowsHtml='';
+    let skipNotes = 0; // remaining rows whose notes <td> is already covered by a rowspan above
     section.rows.forEach((r,i)=>{
       const tot = this.rowTotal(r);
+
+      let notesCell;
+      if(skipNotes > 0){
+        skipNotes--;
+        notesCell = ''; // covered by a previous rowspan, no <td> here
+      } else {
+        const span = Math.max(1, Number(r.notesSpan) || 1);
+        const rowspanAttr = span > 1 ? ` rowspan="${span}"` : '';
+        notesCell = `<td${rowspanAttr} style="vertical-align:middle;"><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>`;
+        if(span > 1) skipNotes = span - 1;
+      }
+
       rowsHtml += `
         <tr>
           <td style="text-align:center;color:var(--mid);font-size:11px;padding-top:12px;">${i+1}</td>
@@ -552,9 +617,26 @@ const CAT = {
           <td><input class="ltr" type="text" inputmode="decimal" value="${r.qty||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'qty',this.value)"/></td>
           <td><input class="ltr" type="text" inputmode="decimal" value="${r.price||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'price',this.value)"/></td>
           <td class="num-cell">${fmt(tot)}</td>
-          <td><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>
+          ${notesCell}
           <td style="padding-top:12px;"><button class="btn btn-danger btn-sm" onclick="CAT.delRow(${cat._id},${section._id},${r._id})">✕</button></td>
         </tr>`;
+
+      // merge/split toggle sits on the boundary line between row i and row i+1
+      if(i < section.rows.length - 1){
+        const startA = this._findNotesGroupStart(section.rows, i);
+        const startB = this._findNotesGroupStart(section.rows, i+1);
+        const merged = (startA === startB);
+        rowsHtml += `
+          <tr class="notes-merge-row">
+            <td colspan="6" style="padding:0;border:none;"></td>
+            <td style="padding:0;border:none;text-align:center;">
+              <button type="button" class="notes-merge-btn${merged?' merged':''}"
+                title="${merged?'فصل الملاحظات عن الصف اللي تحت':'دمج الملاحظات مع الصف اللي تحت'}"
+                onclick="CAT.toggleNotesMerge(${cat._id},${section._id},${i})">${merged?'⊟':'⊞'}</button>
+            </td>
+            <td style="padding:0;border:none;"></td>
+          </tr>`;
+      }
     });
     return `
       <div class="section-block">
@@ -577,10 +659,16 @@ const CAT = {
               <th style="width:36px;"></th>
             </tr></thead>
             <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="5" style="text-align:right;">إجمالي ${h(section.title||('الجزء '+ordinal(idx)))}</td>
+                <td class="total-val">${fmt(this.sectionItemsTotal(section))}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <button class="btn btn-outline btn-sm" onclick="CAT.addRow(${cat._id},${section._id})">+ إضافة بند</button>
-        <div class="section-subtotal">إجمالي ${h(section.title||('الجزء '+ordinal(idx)))}: ${fmt(this.sectionItemsTotal(section))} جنيه</div>
       </div>`;
   },
 
@@ -645,7 +733,7 @@ const CAT = {
           <button class="btn btn-outline btn-sm" onclick="CAT.addItemsSection(${cat._id})">+ إضافة جزء بنود جديد (أولاً / ثانياً...)</button>
           <button class="btn btn-outline btn-sm" onclick="CAT.addCommissionSection(${cat._id})">+ إضافة نسبة مهندس الإشراف</button>
         </div>
-        <div class="cat-grand">إجمالي ${h(cat.name)}: ${fmt(this.catTotal(cat))} جنيه</div>
+        <div class="cat-grand"><span>إجمالي المبلغ — ${h(cat.name)}</span><span class="amt">${fmt(this.catTotal(cat))} جنيه</span></div>
       `;
       box.appendChild(card);
     });
@@ -663,13 +751,13 @@ const CAT = {
               out.push({
                 category: cat.name, sectionIndex: idx, sectionType:'items', sectionTitle: section.title||'',
                 unit: r.unit||'', description: r.description||'', qty: num(r.qty)||1, price: num(r.price)||0,
-                total: this.rowTotal(r), notes: r.notes||'',
+                total: this.rowTotal(r), notes: r.notes||'', notesSpan: Math.max(1, Number(r.notesSpan)||1),
                 desc:'', percent:'', engineerName:''
               });
             });
           } else {
             out.push({ category:cat.name, sectionIndex:idx, sectionType:'items', sectionTitle:section.title||'',
-              unit:'', description:'', qty:'', price:'', total:'', notes:'', desc:'', percent:'', engineerName:'' });
+              unit:'', description:'', qty:'', price:'', total:'', notes:'', notesSpan:1, desc:'', percent:'', engineerName:'' });
           }
         } else if(section.type==='commission'){
           const base   = this.sectionCommissionBase(cat, idx);
@@ -701,7 +789,7 @@ const CAT = {
         cat.sections[sIdx] = section;
       }
       if(section.type==='items' && (r.description || r.unit || Number(r.qty) || Number(r.price))){
-        section.rows.push({ _id:Math.random(), description:r.description||'', unit:r.unit||'', qty:r.qty||1, price:r.price||0, notes:r.notes||'' });
+        section.rows.push({ _id:Math.random(), description:r.description||'', unit:r.unit||'', qty:r.qty||1, price:r.price||0, notes:r.notes||'', notesSpan: Math.max(1, Number(r.notesSpan)||1) });
       }
     });
     return catOrder.map(name=>{
@@ -732,12 +820,23 @@ function buildPdfHtml(forPrint, forEmail=false){
       if(section.type==='items'){
         const secTotal = CAT.sectionItemsTotal(section);
         let rowsHtml='';
+        let skipNotes = 0;
         section.rows.forEach((r,i)=>{
           const cost = num(r.price);
           const tot  = CAT.rowTotal(r);
           const bg=i%2===0?'#ffffff':'#F4F3F1';
           const desc=(r.description||'—').replace(/\n/g,'<br>');
-          const nt  =(r.notes||'').replace(/\n/g,'<br>');
+          let notesCell;
+          if(skipNotes > 0){
+            skipNotes--;
+            notesCell = '';
+          } else {
+            const span = Math.max(1, Number(r.notesSpan)||1);
+            const rowspanAttr = span > 1 ? ` rowspan="${span}"` : '';
+            const nt = (r.notes||'').replace(/\n/g,'<br>');
+            notesCell = `<td${rowspanAttr} style="padding:7px 6px;font-size:11px;vertical-align:middle;">${nt}</td>`;
+            if(span > 1) skipNotes = span - 1;
+          }
           rowsHtml+=`
             <tr style="background:${bg};border-bottom:1px solid #D3D1C7;">
               <td style="padding:7px 6px;text-align:center;color:#6B6B68;font-size:11px;">${i+1}</td>
@@ -746,7 +845,7 @@ function buildPdfHtml(forPrint, forEmail=false){
               <td style="padding:7px 6px;text-align:center;font-size:11px;">${r.qty||0}</td>
               <td style="padding:7px 6px;direction:ltr;text-align:left;font-size:11px;">${fmt(cost)}</td>
               <td style="padding:7px 6px;direction:ltr;text-align:left;font-weight:700;font-size:11px;">${fmt(tot)}</td>
-              <td style="padding:7px 6px;font-size:11px;">${nt}</td>
+              ${notesCell}
             </tr>`;
         });
         const secLabel = h(ordinal(idx)) + (section.title? (': '+h(section.title)) : '');
