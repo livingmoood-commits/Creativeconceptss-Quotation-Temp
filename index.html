@@ -430,8 +430,9 @@ function openConfirm(msg, cb, title){
   _confirmCb = cb;
   $('confirm-modal').classList.add('open');
   $('confirm-yes').onclick = function(){
+    const cb = _confirmCb;
     closeConfirm();
-    if(_confirmCb) _confirmCb();
+    if(cb) cb();
   };
 }
 function closeConfirm(){ $('confirm-modal').classList.remove('open'); _confirmCb=null; }
@@ -449,7 +450,7 @@ function dollar(){ return $('b-dollar')?.value || $('inp-dollar')?.value || CFG.
 const CAT = {
   newRow(){ return { _id:Math.random(), description:'', unit:'', qty:1, price:0, notes:'', notesSpan:1 }; },
   newItemsSection(title){ return { _id:Math.random(), type:'items', title: title||'', rows:[ this.newRow() ] }; },
-  newCommissionSection(){ return { _id:Math.random(), type:'commission', title:'نسبة مهندس الإشراف', desc:'اشراف هندسي', percent:0, engineerName:'' }; },
+  newCommissionSection(){ return { _id:Math.random(), type:'commission', title:'نسبة مهندس الإشراف', desc:'اشراف هندسي', percent:0, baseOverride:null }; },
   newCategory(name){ return { _id:Math.random(), name: name || 'قسم جديد', sections:[ this.newItemsSection('') ] }; },
 
   addCategory(name){ STATE.categories.push(this.newCategory(name)); this.render(); },
@@ -503,6 +504,20 @@ const CAT = {
   setSectionNum(catId, secId, field, v){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
     const s=c.sections.find(s=>s._id===secId); if(s){ s[field]=num(v); this.render(); }
+  },
+  /* manual override of the commission base ("إجمالي المصروفات"). Empty/blank -> falls back to auto sum. */
+  setSectionBase(catId, secId, v){
+    const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
+    const s=c.sections.find(s=>s._id===secId); if(!s) return;
+    const trimmed = (v+'').trim();
+    s.baseOverride = trimmed==='' ? null : num(v);
+    this.render();
+  },
+  resetSectionBase(catId, secId){
+    const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
+    const s=c.sections.find(s=>s._id===secId); if(!s) return;
+    s.baseOverride = null;
+    this.render();
   },
 
   /* ── rows within an items-section ── */
@@ -574,9 +589,15 @@ const CAT = {
     cat.sections.forEach((sec,i)=>{ if(i<idx && sec.type==='items'){ s += this.sectionItemsTotal(sec); } });
     return s;
   },
+  /* the base used for commission % — auto (sum of items sections before it) unless the user typed an override */
+  effectiveBase(cat, section, idx){
+    const auto = this.sectionCommissionBase(cat, idx);
+    if(section.baseOverride===null || section.baseOverride===undefined || section.baseOverride==='') return auto;
+    return num(section.baseOverride);
+  },
   sectionTotal(cat, section, idx){
     if(section.type==='items') return this.sectionItemsTotal(section);
-    const base = this.sectionCommissionBase(cat, idx);
+    const base = this.effectiveBase(cat, section, idx);
     return base * (num(section.percent)||0) / 100;
   },
   catTotal(cat){ return cat.sections.reduce((s,sec,idx)=>s+this.sectionTotal(cat,sec,idx),0); },
@@ -673,8 +694,10 @@ const CAT = {
   },
 
   renderCommissionSection(cat, section, idx){
-    const base   = this.sectionCommissionBase(cat, idx);
+    const auto   = this.sectionCommissionBase(cat, idx);
+    const base   = this.effectiveBase(cat, section, idx);
     const amount = base * (num(section.percent)||0) / 100;
+    const isOverridden = !(section.baseOverride===null || section.baseOverride===undefined || section.baseOverride==='');
     return `
       <div class="section-block">
         <div class="section-head">
@@ -696,13 +719,16 @@ const CAT = {
                 onchange="CAT.setSectionNum(${cat._id},${section._id},'percent',this.value)"/>
             </div>
             <div class="field">
-              <label>اسم المهندس (اختياري)</label>
-              <input type="text" value="${h(section.engineerName)}" placeholder="اسم المهندس"
-                onchange="CAT.setSectionField(${cat._id},${section._id},'engineerName',this.value)"/>
+              <label>إجمالي المصروفات</label>
+              <input class="ltr" type="text" inputmode="decimal" value="${base||''}" placeholder="0"
+                onchange="CAT.setSectionBase(${cat._id},${section._id},this.value)"/>
+              ${isOverridden
+                ? `<span class="note" style="cursor:pointer;color:var(--gold);text-decoration:underline;" onclick="CAT.resetSectionBase(${cat._id},${section._id})">↺ رجوع للحساب التلقائي (${fmt(auto)} جنيه)</span>`
+                : `<span class="note">بيتحسب تلقائيًا من إجمالي الأجزاء اللي قبله، وينفع تعدّله يدويًا لو حبيت</span>`}
             </div>
           </div>
           <div class="comm-result">
-            <span>إجمالي المصروفات (الأجزاء اللي قبلها): <b>${fmt(base)}</b> جنيه</span>
+            <span>إجمالي المصروفات: <b>${fmt(base)}</b> جنيه</span>
             <span>الإجمالي نسبة المهندس: <b>${fmt(amount)}</b> جنيه</span>
           </div>
         </div>
@@ -752,20 +778,21 @@ const CAT = {
                 category: cat.name, sectionIndex: idx, sectionType:'items', sectionTitle: section.title||'',
                 unit: r.unit||'', description: r.description||'', qty: num(r.qty)||1, price: num(r.price)||0,
                 total: this.rowTotal(r), notes: r.notes||'', notesSpan: Math.max(1, Number(r.notesSpan)||1),
-                desc:'', percent:'', engineerName:''
+                desc:'', percent:'', baseOverride:''
               });
             });
           } else {
             out.push({ category:cat.name, sectionIndex:idx, sectionType:'items', sectionTitle:section.title||'',
-              unit:'', description:'', qty:'', price:'', total:'', notes:'', notesSpan:1, desc:'', percent:'', engineerName:'' });
+              unit:'', description:'', qty:'', price:'', total:'', notes:'', notesSpan:1, desc:'', percent:'', baseOverride:'' });
           }
         } else if(section.type==='commission'){
-          const base   = this.sectionCommissionBase(cat, idx);
+          const base   = this.effectiveBase(cat, section, idx);
           const amount = base * (num(section.percent)||0) / 100;
+          const hasOverride = !(section.baseOverride===null || section.baseOverride===undefined || section.baseOverride==='');
           out.push({
             category: cat.name, sectionIndex: idx, sectionType:'commission', sectionTitle: section.title||'',
             unit:'', description:'', qty:'', price:'', total: amount, notes:'',
-            desc: section.desc||'', percent: num(section.percent)||0, engineerName: section.engineerName||''
+            desc: section.desc||'', percent: num(section.percent)||0, baseOverride: hasOverride ? num(section.baseOverride) : ''
           });
         }
       });
@@ -784,7 +811,8 @@ const CAT = {
       let section = cat.sections[sIdx];
       if(!section){
         section = String(r.sectionType)==='commission'
-          ? { _id:Math.random(), type:'commission', title:r.sectionTitle||'نسبة مهندس الإشراف', desc:r.desc||'اشراف هندسي', percent:Number(r.percent)||0, engineerName:r.engineerName||'' }
+          ? { _id:Math.random(), type:'commission', title:r.sectionTitle||'نسبة مهندس الإشراف', desc:r.desc||'اشراف هندسي', percent:Number(r.percent)||0,
+              baseOverride: (r.baseOverride===undefined || r.baseOverride===null || r.baseOverride==='') ? null : Number(r.baseOverride) }
           : { _id:Math.random(), type:'items', title:r.sectionTitle||'', rows:[] };
         cat.sections[sIdx] = section;
       }
@@ -873,7 +901,7 @@ function buildPdfHtml(forPrint, forEmail=false){
             </tfoot>
           </table></div>`;
       } else if(section.type==='commission'){
-        const base   = CAT.sectionCommissionBase(cat, idx);
+        const base   = CAT.effectiveBase(cat, section, idx);
         const amount = base * (num(section.percent)||0) / 100;
         const secLabel = h(ordinal(idx)) + ': ' + h(section.title||'نسبة مهندس الإشراف');
         sectionsHtml += `
@@ -889,7 +917,7 @@ function buildPdfHtml(forPrint, forEmail=false){
             </thead>
             <tbody>
               <tr style="background:#ffffff;border-bottom:1px solid #D3D1C7;">
-                <td style="padding:7px 6px;">${h(section.desc||'اشراف هندسي')}${section.engineerName? ' — '+h(section.engineerName):''}</td>
+                <td style="padding:7px 6px;">${h(section.desc||'اشراف هندسي')}</td>
                 <td style="padding:7px 6px;text-align:center;">${num(section.percent)}%</td>
                 <td style="padding:7px 6px;direction:ltr;text-align:left;">${fmt(base)}</td>
                 <td style="padding:7px 6px;direction:ltr;text-align:left;font-weight:700;">${fmt(amount)}</td>
