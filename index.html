@@ -158,6 +158,12 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 .info-row{display:flex;align-items:baseline;gap:7px;}
 .info-lbl{font-size:12px;color:var(--mid);font-weight:700;white-space:nowrap;}
 .info-val{font-size:15px;font-weight:700;color:var(--dark);}
+.info-val-input{font-size:15px;font-weight:700;color:var(--dark);border:none;border-bottom:1.5px dashed var(--border);
+  background:transparent;padding:2px 4px;min-width:160px;font-family:'Cairo',sans-serif;}
+.info-val-input:focus{outline:none;border-bottom-color:var(--gold);background:#fff;}
+.info-date-input{font-size:14px;font-weight:700;color:var(--dark);border:none;border-bottom:1.5px dashed var(--border);
+  background:transparent;padding:2px 4px;font-family:'Cairo',sans-serif;}
+.info-date-input:focus{outline:none;border-bottom-color:var(--gold);background:#fff;}
 .dollar-inline{display:flex;align-items:center;gap:8px;}
 .dollar-inline input{width:80px;padding:7px 9px;font-size:14px;font-weight:700;}
 
@@ -347,11 +353,15 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
         <div class="info-box">
           <div class="info-row">
             <span class="info-lbl">موجه إلى:</span>
-            <span class="info-val" id="b-engineer"></span>
+            <input class="info-val-input" id="b-engineer" onchange="UI.updateCustomerField('engineer', this.value)"/>
           </div>
           <div class="info-row">
             <span class="info-lbl">العنوان / المشروع:</span>
-            <span class="info-val" id="b-address"></span>
+            <input class="info-val-input" id="b-address" onchange="UI.updateCustomerField('address', this.value)"/>
+          </div>
+          <div class="info-row">
+            <span class="info-lbl">تاريخ الكوتيشن:</span>
+            <input type="date" class="info-date-input" id="b-date" onchange="UI.updateCustomerField('date', this.value)"/>
           </div>
         </div>
         <div class="dollar-inline">
@@ -842,10 +852,14 @@ const CAT = {
 };
 
 /* ─── PDF HTML builder ─── */
+function formatDateDMY(iso){
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso);
+}
 function buildPdfHtml(forPrint, forEmail=false){
   const c   = STATE.customer || {};
   const dlr = dollar();
-  const date= new Date().toLocaleDateString('en-GB');
+  const date= c.date ? formatDateDMY(c.date) : new Date().toLocaleDateString('en-GB');
   const allNotes = [...CFG.noteLines.map(l=>l.replace('{DOLLAR}',dlr)), ...CFG.generalNotes];
   const generalNotes = '<div class="notes-title">ملاحظات عامة</div>' +
     allNotes.map((l,i)=>`<div style="margin-bottom:8px;"><b>${i+1}-</b> ${l}</div>`).join('');
@@ -1185,20 +1199,24 @@ const UI = {
     const dlr = $('inp-dollar').value || CFG.defaultDollar;
     if(!eng && !adr){ alert_('alert-create','err','برجاء إدخال موجه إلى أو العنوان'); return; }
     const name = [eng,adr].filter(Boolean).join(' - ');
-    STATE.customer = { name, engineer:eng, address:adr };
+    const today = new Date().toISOString().slice(0,10);
+    STATE.customer = { name, engineer:eng, address:adr, date:today, originalName:name };
     STATE.categories = [];
-    $('b-engineer').textContent = eng || '—';
-    $('b-address').textContent  = adr || '—';
-    $('b-dollar').value = dlr;
+    $('b-engineer').value = eng;
+    $('b-address').value  = adr;
+    $('b-date').value     = today;
+    $('b-dollar').value   = dlr;
     CAT.renderChips();
     CAT.render();
     this.goEditor();
   },
 
   openCustomer(c){
-    STATE.customer = c;
-    $('b-engineer').textContent = c.engineer || '—';
-    $('b-address').textContent  = c.address  || '—';
+    const today = new Date().toISOString().slice(0,10);
+    STATE.customer = { ...c, date: (c.date ? String(c.date).slice(0,10) : today), originalName: c.name };
+    $('b-engineer').value = c.engineer || '';
+    $('b-address').value  = c.address  || '';
+    $('b-date').value     = STATE.customer.date;
     loading('جاري تحميل الكوتيشن...');
     API.fetch('GET',{action:'getQuotation',name:c.name})
       .then(d=>{
@@ -1209,6 +1227,15 @@ const UI = {
       })
       .catch(()=>{ STATE.categories=[]; CAT.renderChips(); CAT.render(); this.goEditor(); })
       .finally(loaded);
+  },
+
+  /* called when the user edits موجه إلى / العنوان / التاريخ directly in the editor */
+  updateCustomerField(field, value){
+    if(!STATE.customer) return;
+    STATE.customer[field] = value;
+    if(field === 'engineer' || field === 'address'){
+      STATE.customer.name = [STATE.customer.engineer, STATE.customer.address].filter(Boolean).join(' - ');
+    }
   }
 };
 
