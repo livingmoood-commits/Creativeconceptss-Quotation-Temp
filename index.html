@@ -1139,7 +1139,15 @@ ${(forPrint || forEmail) ? '' : `<div class="dl-bar">
 const UI = {
   show(id){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); $(id).classList.add('active'); },
   goHome(){   this.show('pg-home'); API.listCustomers(); },
-  goEditor(){ this.show('pg-editor'); },
+  goEditor(){
+    // ضمان إضافي: أي مرة نوصل لصفحة التحرير والتاريخ لسه فاضي، نحطله تاريخ انهارده تلقائيًا (وتقدر تعدله عادي)
+    if ($('b-date') && !$('b-date').value) {
+      const today = new Date().toISOString().slice(0,10);
+      $('b-date').value = today;
+      if (STATE.customer) STATE.customer.date = STATE.customer.date || today;
+    }
+    this.show('pg-editor');
+  },
 
   openMailPrompt(){
     $('mail-to-input').value = '';
