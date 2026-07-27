@@ -184,6 +184,14 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
   padding:4px 2px;max-width:70%;border-radius:0;
 }
 .cat-name-input:focus{background:var(--bg);}
+.estimate-title-input{
+  display:block;width:100%;min-height:56px;resize:vertical;margin-bottom:16px;
+  background:#8C9AA6;color:#fff;border:1px dashed rgba(255,255,255,.5);border-radius:6px;
+  font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;text-align:center;
+  padding:12px 16px;line-height:1.7;direction:rtl;
+}
+.estimate-title-input::placeholder{color:rgba(255,255,255,.85);}
+.estimate-title-input:focus{background:#76858F;outline:none;}
 .cat-subtotal{margin-top:12px;text-align:left;direction:ltr;font-weight:700;color:var(--gold-l);
   background:var(--green);padding:9px 16px;border-radius:6px;font-size:14px;}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
@@ -451,7 +459,7 @@ const CAT = {
   newRow(){ return { _id:Math.random(), description:'', unit:'', qty:1, price:0, notes:'', notesSpan:1 }; },
   newItemsSection(title){ return { _id:Math.random(), type:'items', title: title||'', rows:[ this.newRow() ] }; },
   newCommissionSection(){ return { _id:Math.random(), type:'commission', title:'نسبة مهندس الإشراف', desc:'اشراف هندسي', percent:0, baseOverride:null }; },
-  newCategory(name){ return { _id:Math.random(), name: name || 'قسم جديد', sections:[ this.newItemsSection('') ] }; },
+  newCategory(name){ return { _id:Math.random(), name: name || 'قسم جديد', estimateTitle:'', sections:[ this.newItemsSection('') ] }; },
 
   addCategory(name){ STATE.categories.push(this.newCategory(name)); this.render(); },
   addCategoryFromInput(){
@@ -470,6 +478,7 @@ const CAT = {
     );
   },
   setName(id,v){ const c=STATE.categories.find(c=>c._id===id); if(c) c.name=v; },
+  setEstimateTitle(id,v){ const c=STATE.categories.find(c=>c._id===id); if(c) c.estimateTitle=v; },
 
   /* ── sections ── */
   addItemsSection(catId){
@@ -750,6 +759,8 @@ const CAT = {
           : this.renderItemsSection(cat, section, idx);
       });
       card.innerHTML = `
+        <textarea class="estimate-title-input" placeholder="مقايسة مبدئية لأعمال ... (اكتب عنوان المقايسة هنا)"
+          onchange="CAT.setEstimateTitle(${cat._id},this.value)">${h(cat.estimateTitle||'')}</textarea>
         <div class="cat-head">
           <input class="cat-name-input" value="${h(cat.name)}" onchange="CAT.setName(${cat._id},this.value)"/>
           <button class="btn btn-danger btn-sm" onclick="CAT.delCategory(${cat._id})">✕ حذف القسم</button>
@@ -775,14 +786,14 @@ const CAT = {
           if(section.rows.length){
             section.rows.forEach(r=>{
               out.push({
-                category: cat.name, sectionIndex: idx, sectionType:'items', sectionTitle: section.title||'',
+                category: cat.name, estimateTitle: cat.estimateTitle||'', sectionIndex: idx, sectionType:'items', sectionTitle: section.title||'',
                 unit: r.unit||'', description: r.description||'', qty: num(r.qty)||1, price: num(r.price)||0,
                 total: this.rowTotal(r), notes: r.notes||'', notesSpan: Math.max(1, Number(r.notesSpan)||1),
                 desc:'', percent:'', baseOverride:''
               });
             });
           } else {
-            out.push({ category:cat.name, sectionIndex:idx, sectionType:'items', sectionTitle:section.title||'',
+            out.push({ category:cat.name, estimateTitle: cat.estimateTitle||'', sectionIndex:idx, sectionType:'items', sectionTitle:section.title||'',
               unit:'', description:'', qty:'', price:'', total:'', notes:'', notesSpan:1, desc:'', percent:'', baseOverride:'' });
           }
         } else if(section.type==='commission'){
@@ -790,7 +801,7 @@ const CAT = {
           const amount = base * (num(section.percent)||0) / 100;
           const hasOverride = !(section.baseOverride===null || section.baseOverride===undefined || section.baseOverride==='');
           out.push({
-            category: cat.name, sectionIndex: idx, sectionType:'commission', sectionTitle: section.title||'',
+            category: cat.name, estimateTitle: cat.estimateTitle||'', sectionIndex: idx, sectionType:'commission', sectionTitle: section.title||'',
             unit:'', description:'', qty:'', price:'', total: amount, notes:'',
             desc: section.desc||'', percent: num(section.percent)||0, baseOverride: hasOverride ? num(section.baseOverride) : ''
           });
@@ -805,7 +816,7 @@ const CAT = {
     const catMap = new Map(); const catOrder = [];
     (rows||[]).forEach(r=>{
       const cname = (r.category && String(r.category).trim()) || 'بند عام';
-      if(!catMap.has(cname)){ catMap.set(cname, { _id:Math.random(), name:cname, sections:[] }); catOrder.push(cname); }
+      if(!catMap.has(cname)){ catMap.set(cname, { _id:Math.random(), name:cname, estimateTitle:r.estimateTitle||'', sections:[] }); catOrder.push(cname); }
       const cat = catMap.get(cname);
       const sIdx = (r.sectionIndex!==undefined && r.sectionIndex!==null && r.sectionIndex!=='') ? Number(r.sectionIndex) : 0;
       let section = cat.sections[sIdx];
@@ -922,7 +933,8 @@ function buildPdfHtml(forPrint, forEmail=false){
 
     sectionsHtml += `<div class="notes-box" style="margin-top:10px;margin-bottom:8px;font-weight:700;text-align:center;background:#46453F;color:#F1EFE8;">إجمالي المبلغ — ${h(cat.name)}: ${fmt(CAT.catTotal(cat))} جنيه</div>`;
 
-    categoriesHtml += `<div class="cat-divider"></div><div class="cat-name-bar">${h(cat.name)}</div>${sectionsHtml}`;
+    const estimateBar = cat.estimateTitle ? `<div class="estimate-title-bar">${h(cat.estimateTitle)}</div>` : '';
+    categoriesHtml += `<div class="cat-divider"></div>${estimateBar}<div class="cat-name-bar">${h(cat.name)}</div>${sectionsHtml}`;
   });
 
   let summaryHtml = '';
@@ -994,6 +1006,9 @@ function buildPdfHtml(forPrint, forEmail=false){
 
     /* clear colored divider before every new category */
     .cat-divider{ height:3px; background:linear-gradient(90deg,transparent,#2C7BC9,transparent); margin:28px 0 0; border-radius:3px; }
+
+    .estimate-title-bar{ background:#8C9AA6; color:#fff; padding:11px 14px; font-weight:700; font-size:14.5px;
+      border-radius:6px; direction:rtl; text-align:center; margin-top:16px; letter-spacing:.3px; line-height:1.6; }
 
     .cat-name-bar{ background:#2C7BC9; color:#fff; padding:12px 14px; font-weight:700; font-size:17px;
       border-radius:6px; direction:rtl; text-align:center; margin-top:14px; margin-bottom:10px; font-family:'Playfair Display',Georgia,serif; letter-spacing:.5px; }
