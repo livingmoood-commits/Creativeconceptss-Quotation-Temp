@@ -221,10 +221,11 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
   background:var(--gold);padding:7px 14px;border-radius:6px;font-size:13px;}
 
 .comm-block{background:var(--bg);border:1.5px dashed var(--gold);border-radius:8px;padding:16px;}
-.comm-grid{display:grid;grid-template-columns:1.3fr .8fr 1.1fr;gap:12px;margin-bottom:10px;}
-.comm-result{background:var(--dark);color:var(--gold-l);padding:9px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
-.comm-result b{color:#fff;font-family:'Playfair Display',serif;font-size:15px;}
-.comm-pct-badge{background:var(--gold);color:var(--dark);font-weight:800;padding:4px 14px;border-radius:20px;font-size:13px;}
+.comm-grid{display:grid;grid-template-columns:1.1fr .7fr 1fr .9fr;gap:12px;margin-bottom:10px;}
+.comm-total-box{background:var(--gold);color:var(--dark);border:1.5px solid var(--gold);border-radius:8px;
+  padding:9px 10px;font-weight:800;font-size:14px;text-align:center;display:flex;align-items:baseline;justify-content:center;gap:5px;}
+.comm-total-unit{font-size:11px;font-weight:700;opacity:.75;}
+.field-pct input{border:2px solid var(--gold);font-weight:800;}
 .add-section-bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 
 .cat-grand{margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
@@ -733,7 +734,7 @@ const CAT = {
               <input type="text" value="${h(section.desc)}" placeholder="اشراف هندسي"
                 onchange="CAT.setSectionField(${cat._id},${section._id},'desc',this.value)"/>
             </div>
-            <div class="field">
+            <div class="field field-pct">
               <label>النسبة %</label>
               <input class="ltr" type="text" inputmode="decimal" value="${section.percent||''}" placeholder="مثال: 15"
                 onchange="CAT.setSectionNum(${cat._id},${section._id},'percent',this.value)"/>
@@ -744,13 +745,12 @@ const CAT = {
                 onchange="CAT.setSectionBase(${cat._id},${section._id},this.value)"/>
               ${isOverridden
                 ? `<span class="note" style="cursor:pointer;color:var(--gold);text-decoration:underline;" onclick="CAT.resetSectionBase(${cat._id},${section._id})">↺ رجوع للحساب التلقائي (${fmt(auto)} جنيه)</span>`
-                : `<span class="note">بيتحسب تلقائيًا من إجمالي الأجزاء اللي قبله، وينفع تعدّله يدويًا لو حبيت</span>`}
+                : ``}
             </div>
-          </div>
-          <div class="comm-result">
-            <span>إجمالي المصروفات: <b>${fmt(base)}</b> جنيه</span>
-            <span class="comm-pct-badge">${num(section.percent)}%</span>
-            <span>الإجمالي نسبة المهندس: <b>${fmt(amount)}</b> جنيه</span>
+            <div class="field">
+              <label>الإجمالي نسبة المهندس</label>
+              <div class="comm-total-box">${fmt(amount)} <span class="comm-total-unit">جنيه</span></div>
+            </div>
           </div>
         </div>
       </div>`;
@@ -952,10 +952,10 @@ function buildPdfHtml(forPrint, forEmail=false){
                 <span class="comm-box-label">إجمالي المصروفات</span>
                 <span class="comm-box-val" style="direction:ltr;">${fmt(base)}</span>
               </div>
-            </div>
-            <div class="comm-result">
-              <span>إجمالي المصروفات: <b>${fmt(base)}</b> جنيه</span>
-              <span>الإجمالي نسبة المهندس: <b>${fmt(amount)}</b> جنيه</span>
+              <div class="comm-box comm-box-total">
+                <span class="comm-box-label">الإجمالي نسبة المهندس</span>
+                <span class="comm-box-val" style="direction:ltr;">${fmt(amount)}</span>
+              </div>
             </div>
           </div>`;
       }
@@ -1078,7 +1078,7 @@ function buildPdfHtml(forPrint, forEmail=false){
     /* boxed "square" layout for the supervision-fee section, matching the editor's field style */
     .comm-ord-label{ text-align:center; font-weight:700; font-size:13px; color:#46453F; margin-top:16px; letter-spacing:.3px; }
     .comm-card{ background:#F4F3F1; border:1.5px dashed #D3D1C7; border-radius:8px; padding:14px; margin-top:6px; margin-bottom:16px; }
-    .comm-boxes{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .comm-boxes{ display:flex; gap:10px; flex-wrap:wrap; }
     .comm-box{ flex:1; min-width:120px; background:#fff; border:1.5px solid #D3D1C7; border-radius:6px;
       padding:10px 12px; text-align:center; display:flex; flex-direction:column; gap:5px; }
     .comm-box-label{ font-size:10.5px; font-weight:700; color:#8A8A86; letter-spacing:.4px; }
@@ -1086,9 +1086,10 @@ function buildPdfHtml(forPrint, forEmail=false){
     /* النسبة % لازم تبرز بحدود أوضح عن باقي المربعات */
     .comm-box-pct{ border:2px solid #2C7BC9; }
     .comm-box-pct .comm-box-val{ color:#2C7BC9; font-weight:800; font-size:15px; }
-    .comm-result{ background:#46453F; color:#F1EFE8; border-radius:6px; padding:10px 14px; font-size:12.5px;
-      display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-    .comm-result b{ color:#fff; }
+    /* مربع الإجمالي النهائي — يبرز بخلفية داكنة عشان يبان واضح إنه الناتج النهائي */
+    .comm-box-total{ background:#46453F; border-color:#46453F; }
+    .comm-box-total .comm-box-label{ color:#D3D1C7; }
+    .comm-box-total .comm-box-val{ color:#F1EFE8; font-size:15px; font-weight:800; }
     @media print { .comm-boxes{ flex-wrap:nowrap; } }
 
     .dl-bar { position:fixed; bottom:0; left:0; right:0; background:#5F5E5A; padding:14px 24px; display:flex; justify-content:center; gap:14px; z-index:999; box-shadow:0 -4px 20px rgba(0,0,0,.3); }
