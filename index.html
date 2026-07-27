@@ -126,6 +126,11 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 }
 .q-tbl td input[type=number],.q-tbl td input.ltr{direction:ltr;text-align:left;}
 .q-tbl td input:focus,.q-tbl td textarea:focus{border-color:var(--gold);}
+[data-nav="1"].cell-selected{
+  border-color:var(--gold)!important;
+  box-shadow:0 0 0 2px rgba(212,185,140,.55);
+  background:#FFF8EA!important;
+}
 .q-tbl td textarea{resize:vertical;min-height:130px;line-height:1.75;}
 .q-tbl td.num-cell{font-weight:700;white-space:nowrap;direction:ltr;text-align:left;padding-top:12px;}
 .q-tbl tr.notes-merge-row{border-bottom:none;}
@@ -222,8 +227,9 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 
 .comm-block{background:var(--bg);border:1.5px dashed var(--gold);border-radius:8px;padding:16px;}
 .comm-grid{display:grid;grid-template-columns:1.3fr .8fr 1.1fr;gap:12px;margin-bottom:10px;}
-.comm-result{background:var(--dark);color:var(--gold-l);padding:9px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.comm-result{background:var(--dark);color:var(--gold-l);padding:9px 14px;border-radius:6px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
 .comm-result b{color:#fff;font-family:'Playfair Display',serif;font-size:15px;}
+.comm-pct-badge{background:var(--gold);color:var(--dark);font-weight:800;padding:4px 14px;border-radius:20px;font-size:13px;}
 .add-section-bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 
 .cat-grand{margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
@@ -427,7 +433,7 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 /* ─── helpers ─── */
 const $  = id => document.getElementById(id);
 const h  = s  => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const fmt= n  => Number(n||0).toLocaleString('en-US');
+const fmt= n  => Math.round(Number(n||0)).toLocaleString('en-US');
 const num= v  => parseFloat((v+'').replace(/,/g,''))||0;
 const ordinal = i => CFG.ordinals[i] || ((i+1) + '-');
 
@@ -520,17 +526,17 @@ const CAT = {
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
     const s=c.sections.find(s=>s._id===secId); if(s) s[field]=v;
   },
-  setSectionNum(catId, secId, field, v){
+  setSectionNum(catId, secId, field, v, skipRender){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
-    const s=c.sections.find(s=>s._id===secId); if(s){ s[field]=num(v); this.render(); }
+    const s=c.sections.find(s=>s._id===secId); if(s){ s[field]=num(v); if(!skipRender) this.render(); }
   },
   /* manual override of the commission base ("إجمالي المصروفات"). Empty/blank -> falls back to auto sum. */
-  setSectionBase(catId, secId, v){
+  setSectionBase(catId, secId, v, skipRender){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
     const s=c.sections.find(s=>s._id===secId); if(!s) return;
     const trimmed = (v+'').trim();
     s.baseOverride = trimmed==='' ? null : num(v);
-    this.render();
+    if(!skipRender) this.render();
   },
   resetSectionBase(catId, secId){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
@@ -553,10 +559,10 @@ const CAT = {
     const s=c.sections.find(s=>s._id===secId); if(!s) return;
     const r=s.rows.find(r=>r._id===rowId); if(r) r[field]=val;
   },
-  setRowNum(catId,secId,rowId,field,val){
+  setRowNum(catId,secId,rowId,field,val,skipRender){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
     const s=c.sections.find(s=>s._id===secId); if(!s) return;
-    const r=s.rows.find(r=>r._id===rowId); if(r){ r[field]=num(val); this.render(); }
+    const r=s.rows.find(r=>r._id===rowId); if(r){ r[field]=num(val); if(!skipRender) this.render(); }
   },
 
   /* ── merge/split notes cells between two consecutive rows (rowspan), like merging cells in Excel ──
@@ -645,17 +651,17 @@ const CAT = {
       } else {
         const span = Math.max(1, Number(r.notesSpan) || 1);
         const rowspanAttr = span > 1 ? ` rowspan="${span}"` : '';
-        notesCell = `<td${rowspanAttr} style="vertical-align:middle;"><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>`;
+        notesCell = `<td${rowspanAttr} style="vertical-align:middle;"><textarea data-nav="1" data-kind="row" data-cat="${cat._id}" data-sec="${section._id}" data-row="${r._id}" data-field="notes" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>`;
         if(span > 1) skipNotes = span - 1;
       }
 
       rowsHtml += `
         <tr>
           <td style="text-align:center;color:var(--mid);font-size:11px;padding-top:12px;">${i+1}</td>
-          <td><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'description',this.value)" placeholder="اكتب اسم البند... (ينفع تكتب أسطر متعددة)">${h(r.description)}</textarea></td>
-          <td><input type="text" value="${h(r.unit)}" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'unit',this.value)" placeholder="م2 / م.ط / قطعة"/></td>
-          <td><input class="ltr" type="text" inputmode="decimal" value="${r.qty||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'qty',this.value)"/></td>
-          <td><input class="ltr" type="text" inputmode="decimal" value="${r.price||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'price',this.value)"/></td>
+          <td><textarea data-nav="1" data-kind="row" data-cat="${cat._id}" data-sec="${section._id}" data-row="${r._id}" data-field="description" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'description',this.value)" placeholder="اكتب اسم البند... (ينفع تكتب أسطر متعددة)">${h(r.description)}</textarea></td>
+          <td><input data-nav="1" data-kind="row" data-cat="${cat._id}" data-sec="${section._id}" data-row="${r._id}" data-field="unit" type="text" value="${h(r.unit)}" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'unit',this.value)" placeholder="م2 / م.ط / قطعة"/></td>
+          <td><input data-nav="1" data-kind="rownum" data-cat="${cat._id}" data-sec="${section._id}" data-row="${r._id}" data-field="qty" class="ltr" type="text" inputmode="decimal" value="${r.qty||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'qty',this.value)"/></td>
+          <td><input data-nav="1" data-kind="rownum" data-cat="${cat._id}" data-sec="${section._id}" data-row="${r._id}" data-field="price" class="ltr" type="text" inputmode="decimal" value="${r.price||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'price',this.value)"/></td>
           <td class="num-cell">${fmt(tot)}</td>
           ${notesCell}
           <td style="padding-top:12px;"><button class="btn btn-danger btn-sm" onclick="CAT.delRow(${cat._id},${section._id},${r._id})">✕</button></td>
@@ -729,17 +735,17 @@ const CAT = {
           <div class="comm-grid">
             <div class="field">
               <label>التوصيف</label>
-              <input type="text" value="${h(section.desc)}" placeholder="اشراف هندسي"
+              <input data-nav="1" data-kind="sectionfield" data-cat="${cat._id}" data-sec="${section._id}" data-field="desc" type="text" value="${h(section.desc)}" placeholder="اشراف هندسي"
                 onchange="CAT.setSectionField(${cat._id},${section._id},'desc',this.value)"/>
             </div>
             <div class="field">
               <label>النسبة %</label>
-              <input class="ltr" type="text" inputmode="decimal" value="${section.percent||''}" placeholder="مثال: 15"
+              <input data-nav="1" data-kind="sectionnum" data-cat="${cat._id}" data-sec="${section._id}" data-field="percent" class="ltr" type="text" inputmode="decimal" value="${section.percent||''}" placeholder="مثال: 15"
                 onchange="CAT.setSectionNum(${cat._id},${section._id},'percent',this.value)"/>
             </div>
             <div class="field">
               <label>إجمالي المصروفات</label>
-              <input class="ltr" type="text" inputmode="decimal" value="${base||''}" placeholder="0"
+              <input data-nav="1" data-kind="sectionbase" data-cat="${cat._id}" data-sec="${section._id}" data-field="base" class="ltr" type="text" inputmode="decimal" value="${base||''}" placeholder="0"
                 onchange="CAT.setSectionBase(${cat._id},${section._id},this.value)"/>
               ${isOverridden
                 ? `<span class="note" style="cursor:pointer;color:var(--gold);text-decoration:underline;" onclick="CAT.resetSectionBase(${cat._id},${section._id})">↺ رجوع للحساب التلقائي (${fmt(auto)} جنيه)</span>`
@@ -748,6 +754,7 @@ const CAT = {
           </div>
           <div class="comm-result">
             <span>إجمالي المصروفات: <b>${fmt(base)}</b> جنيه</span>
+            <span class="comm-pct-badge">${num(section.percent)}%</span>
             <span>الإجمالي نسبة المهندس: <b>${fmt(amount)}</b> جنيه</span>
           </div>
         </div>
@@ -785,6 +792,7 @@ const CAT = {
       box.appendChild(card);
     });
     $('grand-total').textContent = fmt(this.grand()) + ' جنيه';
+    if(window.SHEETNAV) SHEETNAV.reapply();
   },
 
   /* flatten categories -> rows array expected by the backend sheet schema */
@@ -1354,6 +1362,172 @@ const PDF = {
     }, 3000);
   }
 };
+/* ─── SHEETNAV: يخلي جداول البنود تتصرف زي Google Sheets/Excel ───
+   • كليك عادي = تحديد خلية واحدة (تتلون بحدود ذهبية)
+   • Ctrl/Cmd + كليك = إضافة/إلغاء خلية من التحديد المتعدد
+   • Ctrl/Cmd + V و فيه أكتر من خلية متحددة = يلصق نفس القيمة في كل الخلايا المتحددة
+   • Tab / Shift+Tab = التالي/السابق بترتيب الجدول
+   • Enter (في الحقول العادية) وأسهم فوق/تحت/يمين/شمال = تتحرك بين الخلايا زي الشيت
+     (التكست إريا بتاعت "البند/الوصف" و"ملاحظات" بتفضل تقبل Enter عادي لعمل سطر جديد) */
+const SHEETNAV = {
+  selected: new Set(),
+
+  cellKey(el){
+    return [el.dataset.cat, el.dataset.sec, el.dataset.row||'', el.dataset.field, el.dataset.kind].join('|');
+  },
+  getCells(){
+    return Array.from(document.querySelectorAll('[data-nav="1"]')).filter(el => el.offsetParent !== null);
+  },
+  clearSelection(){
+    document.querySelectorAll('.cell-selected').forEach(el => el.classList.remove('cell-selected'));
+    this.selected.clear();
+  },
+  selectSingle(el){
+    this.clearSelection();
+    this.selected.add(this.cellKey(el));
+    el.classList.add('cell-selected');
+  },
+  toggle(el){
+    const k = this.cellKey(el);
+    if(this.selected.has(k)){ this.selected.delete(k); el.classList.remove('cell-selected'); }
+    else { this.selected.add(k); el.classList.add('cell-selected'); }
+  },
+  reapply(){
+    this.getCells().forEach(el => {
+      el.classList.toggle('cell-selected', this.selected.has(this.cellKey(el)));
+    });
+  },
+  focusCell(el){
+    this.selectSingle(el);
+    el.focus();
+    if(el.select) el.select();
+    el.scrollIntoView({ block:'nearest', inline:'nearest' });
+  },
+
+  /* يطبق قيمة على خلية واحدة حسب نوعها، ويرجع true لو محتاجة إعادة رسم (عشان تحدّث الإجماليات) */
+  applyValue(el, text){
+    const cat = parseFloat(el.dataset.cat), sec = parseFloat(el.dataset.sec);
+    const kind = el.dataset.kind, field = el.dataset.field;
+    if(kind === 'row'){ CAT.setRow(cat, sec, parseFloat(el.dataset.row), field, text); return false; }
+    if(kind === 'rownum'){ CAT.setRowNum(cat, sec, parseFloat(el.dataset.row), field, text, true); return true; }
+    if(kind === 'sectionfield'){ CAT.setSectionField(cat, sec, field, text); return false; }
+    if(kind === 'sectionnum'){ CAT.setSectionNum(cat, sec, field, text, true); return true; }
+    if(kind === 'sectionbase'){ CAT.setSectionBase(cat, sec, text, true); return true; }
+    return false;
+  },
+
+  /* ترتيب الجدول (Tab) */
+  moveTab(el, dir){
+    const cells = this.getCells();
+    const idx = cells.indexOf(el);
+    if(idx === -1) return;
+    const next = cells[idx + dir];
+    if(next) this.focusCell(next);
+  },
+
+  /* أقرب خلية في اتجاه معين على الشاشة (فوق/تحت/يمين/شمال) — بيشتغل صح حتى مع RTL لأنه بيعتمد على إحداثيات الشاشة */
+  findSpatial(current, dir){
+    const cells = this.getCells();
+    const rect = current.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    let best = null, bestScore = Infinity;
+    cells.forEach(el => {
+      if(el === current) return;
+      const r = el.getBoundingClientRect();
+      const ex = r.left + r.width/2, ey = r.top + r.height/2;
+      let primary, secondary, ok = false;
+      if(dir === 'down'  && ey > cy + 3){ primary = ey - cy; secondary = Math.abs(ex - cx); ok = true; }
+      else if(dir === 'up'    && ey < cy - 3){ primary = cy - ey; secondary = Math.abs(ex - cx); ok = true; }
+      else if(dir === 'right' && ex > cx + 3){ primary = ex - cx; secondary = Math.abs(ey - cy); ok = true; }
+      else if(dir === 'left'  && ex < cx - 3){ primary = cx - ex; secondary = Math.abs(ey - cy); ok = true; }
+      if(!ok) return;
+      const score = secondary * 3 + primary;
+      if(score < bestScore){ bestScore = score; best = el; }
+    });
+    return best;
+  },
+  moveSpatial(el, dir){
+    const target = this.findSpatial(el, dir);
+    if(target) this.focusCell(target);
+  },
+
+  atBoundary(el, side){
+    if(el.value === '') return true;
+    return side === 'start'
+      ? (el.selectionStart === 0 && el.selectionEnd === 0)
+      : (el.selectionStart === el.value.length && el.selectionEnd === el.value.length);
+  },
+  atFirstLine(el){ return !el.value.slice(0, el.selectionStart).includes('\n'); },
+  atLastLine(el){ return !el.value.slice(el.selectionEnd).includes('\n'); },
+
+  init(){
+    // كليك / Ctrl+كليك للتحديد
+    document.addEventListener('mousedown', (e) => {
+      const el = e.target.closest && e.target.closest('[data-nav="1"]');
+      if(!el){ if(this.selected.size) this.clearSelection(); return; }
+      if(e.ctrlKey || e.metaKey){
+        e.preventDefault();
+        this.toggle(el);
+        el.focus();
+      } else {
+        this.clearSelection();
+        this.selected.add(this.cellKey(el));
+        el.classList.add('cell-selected'); // الفوكس والكيرسور بيتحطوا طبيعي، مش محتاجين نمنع الافتراضي
+      }
+    });
+
+    // لصق نفس القيمة في كل الخلايا المتحددة لو أكتر من خلية متحددة
+    document.addEventListener('paste', (e) => {
+      const el = e.target.closest && e.target.closest('[data-nav="1"]');
+      if(!el || this.selected.size <= 1) return; // خلية واحدة = لصق عادي زي ما هو
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const keys = new Set(this.selected);
+      let needsRender = false;
+      this.getCells().forEach(c => {
+        if(keys.has(this.cellKey(c))){
+          c.value = text;
+          if(this.applyValue(c, text)) needsRender = true;
+        }
+      });
+      if(needsRender) CAT.render();
+    });
+
+    // Tab / Enter / أسهم
+    document.addEventListener('keydown', (e) => {
+      const el = e.target.closest && e.target.closest('[data-nav="1"]');
+      if(!el) return;
+      const isTextarea = el.tagName === 'TEXTAREA';
+
+      if(e.key === 'Tab'){
+        e.preventDefault();
+        this.moveTab(el, e.shiftKey ? -1 : 1);
+      } else if(e.key === 'Enter'){
+        if(isTextarea) return; // سيبها تعمل سطر جديد في البند/الملاحظات زي ما هي
+        e.preventDefault();
+        this.moveSpatial(el, e.shiftKey ? 'up' : 'down');
+      } else if(e.key === 'ArrowDown'){
+        if(isTextarea && !this.atLastLine(el)) return;
+        e.preventDefault();
+        this.moveSpatial(el, 'down');
+      } else if(e.key === 'ArrowUp'){
+        if(isTextarea && !this.atFirstLine(el)) return;
+        e.preventDefault();
+        this.moveSpatial(el, 'up');
+      } else if(e.key === 'ArrowRight'){
+        if(!this.atBoundary(el, 'end')) return;
+        e.preventDefault();
+        this.moveSpatial(el, 'right');
+      } else if(e.key === 'ArrowLeft'){
+        if(!this.atBoundary(el, 'start')) return;
+        e.preventDefault();
+        this.moveSpatial(el, 'left');
+      }
+    });
+  }
+};
+SHEETNAV.init();
+
 /* ─── init ─── */
 window.onload = () => API.listCustomers();
 </script>
