@@ -759,12 +759,12 @@ const CAT = {
           : this.renderItemsSection(cat, section, idx);
       });
       card.innerHTML = `
-        <textarea class="estimate-title-input" placeholder="مقايسة مبدئية لأعمال ... (اكتب عنوان المقايسة هنا)"
-          onchange="CAT.setEstimateTitle(${cat._id},this.value)">${h(cat.estimateTitle||'')}</textarea>
         <div class="cat-head">
           <input class="cat-name-input" value="${h(cat.name)}" onchange="CAT.setName(${cat._id},this.value)"/>
           <button class="btn btn-danger btn-sm" onclick="CAT.delCategory(${cat._id})">✕ حذف القسم</button>
         </div>
+        <textarea class="estimate-title-input" placeholder="مقايسة مبدئية لأعمال ... (اكتب عنوان المقايسة هنا)"
+          onchange="CAT.setEstimateTitle(${cat._id},this.value)">${h(cat.estimateTitle||'')}</textarea>
         ${sectionsHtml}
         <div class="add-section-bar">
           <button class="btn btn-outline btn-sm" onclick="CAT.addItemsSection(${cat._id})">+ إضافة جزء بنود جديد (أولاً / ثانياً...)</button>
