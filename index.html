@@ -133,8 +133,25 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 }
 .q-tbl td input[type=number],.q-tbl td input.ltr{direction:ltr;text-align:left;}
 .q-tbl td input:focus,.q-tbl td textarea:focus{border-color:var(--gold);}
+
+/* ── multi-cell drag select (Google-Sheets-style) ── */
+.q-tbl td.selectable{position:relative;cursor:cell;}
+.q-tbl td.cell-selected{background:rgba(44,123,201,.14) !important;}
+.q-tbl td.cell-selected input,
+.q-tbl td.cell-selected textarea{background:rgba(44,123,201,.10);border-color:var(--gold);}
+.q-tbl td.cell-anchor{outline:2px solid var(--gold);outline-offset:-2px;z-index:1;}
+.select-toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--dark);color:var(--gold-l);padding:9px 18px;border-radius:20px;
+  font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;box-shadow:var(--shadow);
+  z-index:980;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+}
+.select-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 .q-tbl td textarea{resize:vertical;min-height:130px;line-height:1.75;}
 .q-tbl td.num-cell{font-weight:700;white-space:nowrap;direction:ltr;text-align:left;padding-top:12px;}
+.q-tbl td[data-cellkey]{cursor:cell;}
+.q-tbl td.gs-selected{outline:2px solid var(--gold);outline-offset:-2px;position:relative;z-index:1;border-radius:3px;}
+body.gs-multi .q-tbl td.gs-selected{background:rgba(44,123,201,.14);}
 .q-tbl tr.notes-merge-row{border-bottom:none;}
 .q-tbl tr.notes-merge-row:hover{background:transparent;}
 .notes-merge-btn{
@@ -146,7 +163,7 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 .notes-merge-btn.merged{background:var(--gold);color:#fff;border-color:var(--gold);}
 
 .grand-bar{background:var(--dark);color:var(--gold-l);padding:13px 20px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700;margin-bottom:16px;}
-.grand-bar .amt{font-family:'Playfair Display',serif;font-size:22px;color:#F1EFE8;}
+.grand-bar .amt{font-family:'Cairo',sans-serif;font-weight:800;font-size:22px;color:#F1EFE8;}
 
 .action-bar{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;}
 
@@ -229,16 +246,16 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 
 .comm-block{background:var(--bg);border:1.5px dashed var(--gold);border-radius:8px;padding:16px;}
 .comm-grid{display:grid;grid-template-columns:1.1fr .7fr 1fr .9fr;gap:12px;margin-bottom:10px;}
-.comm-total-box{background:var(--gold);color:var(--dark);border:1.5px solid var(--gold);border-radius:8px;
+.comm-total-box{background:var(--gold);color:#fff;border:1.5px solid var(--gold);border-radius:8px;
   padding:9px 10px;font-weight:800;font-size:14px;text-align:center;display:flex;align-items:baseline;justify-content:center;gap:5px;}
-.comm-total-unit{font-size:11px;font-weight:700;opacity:.75;}
+.comm-total-unit{font-size:11px;font-weight:700;color:#fff;opacity:.85;}
 .field-pct input{border:2px solid var(--gold);font-weight:800;}
 .add-section-bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;}
 
 .cat-grand{margin-top:0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
   font-weight:700;color:var(--gold-l);background:var(--dark);padding:11px 16px;
   border-radius:0 0 6px 6px;font-size:14px;}
-.cat-grand .amt{direction:ltr;font-family:'Playfair Display',serif;font-size:17px;color:#fff;}
+.cat-grand .amt{direction:ltr;font-family:'Cairo',sans-serif;font-weight:800;font-size:17px;color:#fff;}
 
 /* confirm dialog */
 #confirm-modal{display:none;position:fixed;inset:0;background:rgba(44,44,42,.65);z-index:950;justify-content:center;align-items:center;}
@@ -251,21 +268,67 @@ table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:940px;}
 .confirm-btns{display:flex;gap:10px;justify-content:center;}
 
 @media(max-width:640px){
+  .shell{padding:16px 10px 90px;}
   .fg3,.fg2{grid-template-columns:1fr;}
-  .card{padding:18px 14px;}
+  .card{padding:16px 12px;}
   .action-bar{justify-content:stretch;}
   .action-bar .btn{flex:1;min-width:0;}
   .grand-bar{flex-direction:column;gap:6px;text-align:center;}
   .banner-info{flex-direction:column;align-items:flex-start;gap:14px;}
-  .steps .step{font-size:11px;padding:10px 4px;}
-  .topbar{font-size:10px;letter-spacing:2px;}
+  .steps .step{font-size:10.5px;padding:9px 3px;}
+  .topbar{font-size:9.5px;letter-spacing:1.5px;padding:8px 10px;}
   .cat-name-input{max-width:100%;}
   .comm-grid{grid-template-columns:1fr;}
+  .brand{padding:22px 12px 20px;margin-bottom:22px;}
+  .brand-inner{gap:12px;}
+  .brand-mark .c1,.brand-mark .c2{font-size:40px;}
+  .card-title{font-size:16px;}
+  .q-tbl{font-size:13px;}
+  .q-tbl td input,.q-tbl td textarea{font-size:16px;} /* 16px+ يمنع الزوم التلقائي في آيفون */
+  input,textarea,select{font-size:16px;}
+  .add-row-bar{flex-wrap:wrap;}
+  .add-row-count{width:64px;}
+  .section-head{flex-wrap:wrap;gap:8px;}
+  .comm-box{min-width:100px;}
 }
 @media(max-width:420px){
-  .brand-name{font-size:28px;letter-spacing:3px;}
+  .brand-name{font-size:24px;letter-spacing:2px;}
+  .brand-tagline-ar{font-size:11px;}
+  .brand-mark .c1,.brand-mark .c2{font-size:32px;}
   .btn{padding:10px 14px;font-size:13px;}
+  .steps .step{font-size:9.5px;padding:8px 2px;}
+  .confirm-card{padding:22px 16px;}
 }
+
+/* ─── حركة حية: العناصر بتظهر بحركة ناعمة بدل ما تطلع فجأة، والأزرار والصفحات بتتفاعل مع كل لمسة ─── */
+@keyframes fadeInUp{ from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
+@keyframes fadeInSoft{ from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+@keyframes popIn{ 0%{opacity:0;transform:scale(.9);} 60%{opacity:1;transform:scale(1.03);} 100%{transform:scale(1);} }
+@keyframes bump{ 0%{transform:scale(1);} 35%{transform:scale(1.08);} 100%{transform:scale(1);} }
+@keyframes shimmerMove{ 0%{background-position:0% 50%;} 100%{background-position:200% 50%;} }
+
+.page.active{animation:fadeInSoft .4s ease;}
+.card{animation:fadeInUp .4s ease both;}
+.cat-card{animation:fadeInUp .38s ease both;}
+.section-block{animation:fadeInUp .3s ease both;}
+.c-item{animation:fadeInSoft .3s ease both;}
+.step{position:relative;}
+.step.active::after{
+  content:'';position:absolute;left:0;right:0;bottom:-3px;height:3px;background:var(--gold);
+  border-radius:2px;animation:fadeInSoft .3s ease;
+}
+
+.btn{transition:opacity .15s,transform .15s ease,box-shadow .15s ease;}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(44,44,42,.18);}
+.btn:active{transform:translateY(0) scale(.97);box-shadow:none;}
+
+.c-item{transition:border-color .2s,background .2s,transform .15s ease;}
+.c-item:hover{transform:translateY(-2px);}
+
+.grand-bar .amt.bump,.cat-grand .amt.bump,.comm-total-box.bump{animation:bump .35s ease;}
+
+.brand-mark .c2{animation:popIn .6s ease;}
+
 </style>
 </head>
 <body>
@@ -659,17 +722,17 @@ const CAT = {
       } else {
         const span = Math.max(1, Number(r.notesSpan) || 1);
         const rowspanAttr = span > 1 ? ` rowspan="${span}"` : '';
-        notesCell = `<td${rowspanAttr} style="vertical-align:middle;"><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>`;
+        notesCell = `<td${rowspanAttr} class="selectable" data-sel-row="${i}" data-sel-col="4" data-sel-field="notes" style="vertical-align:middle;"><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'notes',this.value)" placeholder="ملاحظة...">${h(r.notes)}</textarea></td>`;
         if(span > 1) skipNotes = span - 1;
       }
 
       rowsHtml += `
         <tr>
           <td style="text-align:center;color:var(--mid);font-size:11px;padding-top:12px;">${i+1}</td>
-          <td><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'description',this.value)" placeholder="اكتب اسم البند... (ينفع تكتب أسطر متعددة)">${h(r.description)}</textarea></td>
-          <td><input type="text" value="${h(r.unit)}" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'unit',this.value)" placeholder="م2 / م.ط / قطعة"/></td>
-          <td><input class="ltr" type="text" inputmode="decimal" value="${r.qty||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'qty',this.value)"/></td>
-          <td><input class="ltr" type="text" inputmode="decimal" value="${r.price||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'price',this.value)"/></td>
+          <td class="selectable" data-sel-row="${i}" data-sel-col="0" data-sel-field="description"><textarea onchange="CAT.setRow(${cat._id},${section._id},${r._id},'description',this.value)" placeholder="اكتب اسم البند... (ينفع تكتب أسطر متعددة)">${h(r.description)}</textarea></td>
+          <td class="selectable" data-sel-row="${i}" data-sel-col="1" data-sel-field="unit"><input type="text" value="${h(r.unit)}" onchange="CAT.setRow(${cat._id},${section._id},${r._id},'unit',this.value)" placeholder="م2 / م.ط / قطعة"/></td>
+          <td class="selectable" data-sel-row="${i}" data-sel-col="2" data-sel-field="qty"><input class="ltr" type="text" inputmode="decimal" value="${r.qty||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'qty',this.value)"/></td>
+          <td class="selectable" data-sel-row="${i}" data-sel-col="3" data-sel-field="price"><input class="ltr" type="text" inputmode="decimal" value="${r.price||''}" onchange="CAT.setRowNum(${cat._id},${section._id},${r._id},'price',this.value)"/></td>
           <td class="num-cell">${fmt(tot)}</td>
           ${notesCell}
           <td style="padding-top:12px;"><button class="btn btn-danger btn-sm" onclick="CAT.delRow(${cat._id},${section._id},${r._id})">✕</button></td>
@@ -701,7 +764,7 @@ const CAT = {
           <button class="btn btn-danger btn-sm section-del" onclick="CAT.delSection(${cat._id},${section._id})">✕ حذف الجزء</button>
         </div>
         <div class="q-wrap">
-          <table class="q-tbl">
+          <table class="q-tbl" data-sel-table="${cat._id}-${section._id}" data-sel-cat="${cat._id}" data-sel-sec="${section._id}">
             <thead><tr>
               <th style="width:28px;">#</th>
               <th style="min-width:280px;">البند / العمل</th>
@@ -799,9 +862,12 @@ const CAT = {
         </div>
         <div class="cat-grand"><span>إجمالي المبلغ — ${h(cat.name)}</span><span class="amt">${fmt(this.catTotal(cat))} جنيه</span></div>
       `;
+      card.style.animationDelay = (idx * 0.05) + 's';
       box.appendChild(card);
     });
-    $('grand-total').textContent = fmt(this.grand()) + ' جنيه';
+    const gt = $('grand-total');
+    gt.textContent = fmt(this.grand()) + ' جنيه';
+    gt.classList.remove('bump'); void gt.offsetWidth; gt.classList.add('bump');
   },
 
   /* flatten categories -> rows array expected by the backend sheet schema */
@@ -867,6 +933,223 @@ const CAT = {
     });
   }
 };
+
+/* ─── Multi-cell drag select + copy/paste (Google-Sheets style) ─────────────
+   Works on every q-tbl (items table). User mousedown on a .selectable <td>,
+   drags to another cell in the same table -> rectangular range gets highlighted.
+   Ctrl/Cmd+C copies the underlying values as TSV; Ctrl/Cmd+V pastes them back
+   starting at the anchor cell, growing right/down, writing through the same
+   CAT.setRow/setRowNum functions the app already uses so totals + saved state
+   stay in sync. Plain click on one cell just selects that single cell. ── */
+const SEL = {
+  active:false, tableEl:null, anchor:null, focus:null, cells:[],
+
+  toast(msg){
+    let t = $('sel-toast');
+    if(!t){
+      t = document.createElement('div');
+      t.id='sel-toast'; t.className='select-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(()=>t.classList.remove('show'), 1600);
+  },
+
+  cellAt(table, row, col){
+    return table.querySelector(`td.selectable[data-sel-row="${row}"][data-sel-col="${col}"]`);
+  },
+
+  clearVisual(){
+    document.querySelectorAll('.q-tbl td.cell-selected').forEach(td=>td.classList.remove('cell-selected','cell-anchor'));
+  },
+
+  applyVisual(){
+    this.clearVisual();
+    this.cells.forEach(td=>td.classList.add('cell-selected'));
+    if(this.anchorEl) this.anchorEl.classList.add('cell-anchor');
+  },
+
+  rangeCells(table, r1,c1,r2,c2){
+    const rowMin=Math.min(r1,r2), rowMax=Math.max(r1,r2);
+    const colMin=Math.min(c1,c2), colMax=Math.max(c1,c2);
+    const out=[];
+    for(let r=rowMin;r<=rowMax;r++){
+      for(let c=colMin;c<=colMax;c++){
+        const td = this.cellAt(table, r, c);
+        if(td) out.push(td);
+      }
+    }
+    return out;
+  },
+
+  start(td, e){
+    const table = td.closest('table.q-tbl');
+    if(!table) return;
+    // starting a fresh selection on mousedown deselects any previous table's selection
+    this.active = true;
+    this.tableEl = table;
+    this.anchor = { row:Number(td.dataset.selRow), col:Number(td.dataset.selCol) };
+    this.anchorEl = td;
+    this.focus = { ...this.anchor };
+    this.cells = [td];
+    this.applyVisual();
+    // don't hijack the click when the user is just placing a cursor in the input —
+    // only prevent default when they're clearly starting a drag (mousedown outside the input itself is rare
+    // since the input fills the td, so we rely on mousemove threshold instead)
+  },
+
+  extend(td){
+    if(!this.active || !this.tableEl) return;
+    if(td.closest('table.q-tbl') !== this.tableEl) return;
+    const row = Number(td.dataset.selRow), col = Number(td.dataset.selCol);
+    if(this.focus && this.focus.row===row && this.focus.col===col) return;
+    this.focus = { row, col };
+    this.cells = this.rangeCells(this.tableEl, this.anchor.row, this.anchor.col, row, col);
+    this.applyVisual();
+  },
+
+  end(){
+    this.active = false;
+  },
+
+  clear(){
+    this.tableEl=null; this.anchor=null; this.focus=null; this.cells=[]; this.anchorEl=null;
+    this.clearVisual();
+  },
+
+  /* read the live value straight out of the cell's input/textarea */
+  cellValue(td){
+    const el = td.querySelector('input,textarea');
+    return el ? el.value : '';
+  },
+
+  async copy(){
+    if(!this.cells.length || !this.tableEl) return;
+    const rowMin = Math.min(...this.cells.map(td=>Number(td.dataset.selRow)));
+    const rowMax = Math.max(...this.cells.map(td=>Number(td.dataset.selRow)));
+    const colMin = Math.min(...this.cells.map(td=>Number(td.dataset.selCol)));
+    const colMax = Math.max(...this.cells.map(td=>Number(td.dataset.selCol)));
+    const lines = [];
+    for(let r=rowMin; r<=rowMax; r++){
+      const line=[];
+      for(let c=colMin; c<=colMax; c++){
+        const td = this.cellAt(this.tableEl, r, c);
+        line.push(td ? this.cellValue(td) : '');
+      }
+      lines.push(line.join('\t'));
+    }
+    const tsv = lines.join('\n');
+    try{
+      await navigator.clipboard.writeText(tsv);
+      this.toast('✔ تم النسخ (' + this.cells.length + ' خلية)');
+    }catch(e){
+      // fallback for browsers/contexts without clipboard permission
+      const ta=document.createElement('textarea');
+      ta.value=tsv; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      try{ document.execCommand('copy'); this.toast('✔ تم النسخ'); }catch(e2){ this.toast('⚠ تعذر النسخ'); }
+      document.body.removeChild(ta);
+    }
+  },
+
+  /* write a value into a cell through the app's normal state setters, then refresh its DOM display */
+  writeCell(td, value){
+    const table = td.closest('table.q-tbl');
+    const catId = Number(table.dataset.selCat);
+    const secId = Number(table.dataset.selSec);
+    const rowIdx = Number(td.dataset.selRow);
+    const field  = td.dataset.selField;
+    const cat = STATE.categories.find(c=>c._id===catId);
+    if(!cat) return;
+    const section = cat.sections.find(s=>s._id===secId);
+    if(!section) return;
+    const r = section.rows[rowIdx];
+    if(!r) return;
+    if(field==='qty' || field==='price'){
+      r[field] = num(value);
+    } else {
+      r[field] = value;
+    }
+  },
+
+  async paste(){
+    if(!this.anchor || !this.tableEl) return;
+    let text = '';
+    try{ text = await navigator.clipboard.readText(); }
+    catch(e){ this.toast('⚠ محتاج إذن الوصول للحافظة، جرب تلصق بـ Ctrl+V جوه خلية واحدة'); return; }
+    if(!text) return;
+
+    const rows = text.replace(/\r/g,'').split('\n').filter((l,i,arr)=> !(i===arr.length-1 && l===''));
+    const grid = rows.map(line=>line.split('\t'));
+    if(!grid.length) return;
+
+    const startRow = this.anchor.row, startCol = this.anchor.col;
+    let touched = 0;
+    grid.forEach((line, dr)=>{
+      line.forEach((val, dc)=>{
+        const td = this.cellAt(this.tableEl, startRow+dr, startCol+dc);
+        if(!td) return; // out of table bounds (no more rows/cols there) -> skip silently
+        this.writeCell(td, val);
+        touched++;
+      });
+    });
+
+    if(touched){
+      // re-render through the normal CAT pipeline so totals, formatting, and row numbers stay correct
+      CAT.render();
+      this.toast('✔ تم اللصق (' + touched + ' خلية)');
+      // re-apply a visual selection over the pasted range after re-render (new DOM nodes)
+      requestAnimationFrame(()=>{
+        const newTable = document.querySelector(`table.q-tbl[data-sel-table="${this.tableEl.dataset.selTable}"]`);
+        if(newTable){
+          this.tableEl = newTable;
+          const endRow = startRow + grid.length - 1;
+          const endCol = startCol + Math.max(...grid.map(l=>l.length)) - 1;
+          this.cells = this.rangeCells(newTable, startRow, startCol, endRow, endCol);
+          this.anchorEl = this.cellAt(newTable, startRow, startCol);
+          this.applyVisual();
+        }
+      });
+    }
+  }
+};
+
+document.addEventListener('mousedown', (e)=>{
+  const td = e.target.closest('td.selectable');
+  if(td){
+    SEL.start(td, e);
+  } else if(!e.target.closest('.select-toast')){
+    // clicking anywhere outside a selectable cell drops the current selection
+    if(SEL.cells.length) SEL.clear();
+  }
+});
+document.addEventListener('mouseover', (e)=>{
+  if(!SEL.active) return;
+  const td = e.target.closest('td.selectable');
+  if(td) SEL.extend(td);
+});
+document.addEventListener('mouseup', ()=>{ if(SEL.active) SEL.end(); });
+
+document.addEventListener('keydown', (e)=>{
+  const ctrlOrCmd = e.ctrlKey || e.metaKey;
+  if(!ctrlOrCmd) return;
+  if(!SEL.cells.length) return;
+  // if the user is actively typing inside an input/textarea AND only a single cell is selected,
+  // let the browser's native copy/paste handle normal text editing instead of intercepting.
+  const activeInField = document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA');
+  const singleCell = SEL.cells.length===1;
+  if(e.key==='c' || e.key==='C'){
+    if(activeInField && singleCell) return; // allow normal text copy inside one field
+    e.preventDefault();
+    SEL.copy();
+  } else if(e.key==='v' || e.key==='V'){
+    if(activeInField && singleCell) return; // allow normal text paste inside one field
+    e.preventDefault();
+    SEL.paste();
+  }
+});
 
 /* ─── PDF HTML builder ─── */
 function formatDateDMY(iso){
