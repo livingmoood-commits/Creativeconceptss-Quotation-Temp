@@ -839,7 +839,7 @@ const CAT = {
     if(!STATE.categories.length){
       box.innerHTML = '<div class="card empty-cats">لسه مفيش أي قسم — دوس على قسم من الأزرار تحت أو اكتب اسم قسم مخصص عشان تبدأ</div>';
     }
-    STATE.categories.forEach(cat=>{
+    STATE.categories.forEach((cat, catIdx)=>{
       const card = document.createElement('div');
       card.className = 'card cat-card';
       let sectionsHtml='';
@@ -862,7 +862,7 @@ const CAT = {
         </div>
         <div class="cat-grand"><span>إجمالي المبلغ — ${h(cat.name)}</span><span class="amt">${fmt(this.catTotal(cat))} جنيه</span></div>
       `;
-      card.style.animationDelay = (idx * 0.05) + 's';
+      card.style.animationDelay = (catIdx * 0.05) + 's';
       box.appendChild(card);
     });
     const gt = $('grand-total');
