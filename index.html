@@ -307,11 +307,6 @@ body.gs-multi .q-tbl td.gs-selected{background:rgba(44,123,201,.14);}
 @keyframes bump{ 0%{transform:scale(1);} 35%{transform:scale(1.08);} 100%{transform:scale(1);} }
 @keyframes shimmerMove{ 0%{background-position:0% 50%;} 100%{background-position:200% 50%;} }
 
-.page.active{animation:fadeInSoft .4s ease;}
-.card{animation:fadeInUp .4s ease both;}
-.cat-card{animation:fadeInUp .38s ease both;}
-.section-block{animation:fadeInUp .3s ease both;}
-.c-item{animation:fadeInSoft .3s ease both;}
 .step{position:relative;}
 .step.active::after{
   content:'';position:absolute;left:0;right:0;bottom:-3px;height:3px;background:var(--gold);
@@ -862,7 +857,6 @@ const CAT = {
         </div>
         <div class="cat-grand"><span>إجمالي المبلغ — ${h(cat.name)}</span><span class="amt">${fmt(this.catTotal(cat))} جنيه</span></div>
       `;
-      card.style.animationDelay = (catIdx * 0.05) + 's';
       box.appendChild(card);
     });
     const gt = $('grand-total');
@@ -937,7 +931,12 @@ const CAT = {
 /* ─── Multi-cell select + copy/paste ─────────────────────────────────────
    Works on every q-tbl (items table), across the whole table (description,
    unit, qty, price, notes — every .selectable <td>).
-     • Plain click on a cell  -> selects ONLY that cell (drops any other selection).
+     • Plain click on a cell not already in the selection -> selects ONLY that
+                                  cell (drops any other selection).
+     • Plain click on a cell that IS already part of a multi-selection -> keeps
+                                  the whole selection lit up and just focuses that
+                                  cell's input so you can type a new value directly
+                                  into it without losing the rest of the selection.
      • Ctrl/Cmd + click       -> ADDS that cell to the current selection (or removes
                                   it if it was already selected), so you can pick any
                                   number of scattered, non-adjacent cells anywhere in
@@ -948,6 +947,10 @@ const CAT = {
                                   If only one cell is selected and the clipboard holds
                                   a multi-line/tab grid (e.g. copied from Excel/Sheets),
                                   it still grows right/down from that cell like before.
+     • Ctrl/Cmd + Enter       -> with 2+ cells selected, type a new value straight into
+                                  any one of the selected cells (no copy/paste needed),
+                                  then press Ctrl+Enter to apply that exact value to
+                                  every selected cell at once.
    All writes go through the app's normal CAT.setRow/setRowNum-equivalent state
    setter so totals + saved state stay in sync. ── */
 const SEL = {
@@ -1010,6 +1013,15 @@ const SEL = {
         this.anchor = this.anchorEl ? { row:Number(this.anchorEl.dataset.selRow), col:Number(this.anchorEl.dataset.selCol) } : null;
       }
     }
+    this.applyVisual();
+    if(this.cells.length > 1) this.toast('حددت ' + this.cells.length + ' خلية — اكتب في أي واحدة واضغط Ctrl+Enter لتوحيد القيمة');
+  },
+
+  /* keep an already-multi-selected cell lit up while focusing it for direct typing
+     (used on a plain click that lands on a cell already inside the selection) */
+  focusWithinSelection(td){
+    this.anchorEl = td;
+    this.anchor = { row:Number(td.dataset.selRow), col:Number(td.dataset.selCol) };
     this.applyVisual();
   },
 
@@ -1130,6 +1142,35 @@ const SEL = {
         this.applyVisual();
       });
     }
+  },
+
+  /* Ctrl/Cmd+Enter: take whatever value is currently sitting in the focused/active
+     selected cell (even if it hasn't been "confirmed" with onchange/blur yet) and
+     write that exact same value into every other selected cell. */
+  fillSelected(){
+    if(this.cells.length < 2 || !this.tableEl) return;
+    const active = document.activeElement;
+    const activeTd = (active && active.closest) ? active.closest('td.selectable') : null;
+    const sourceTd = (activeTd && this.cells.includes(activeTd)) ? activeTd : (this.anchorEl || this.cells[this.cells.length - 1]);
+    const value = this.cellValue(sourceTd);
+
+    const prevKeys = this.cells.map(td=>({row:Number(td.dataset.selRow), col:Number(td.dataset.selCol)}));
+    const tableKey = this.tableEl.dataset.selTable;
+
+    this.cells.forEach(td=>this.writeCell(td, value));
+
+    CAT.render();
+    this.toast('✔ تم توحيد القيمة في ' + this.cells.length + ' خلية');
+
+    requestAnimationFrame(()=>{
+      const newTable = document.querySelector(`table.q-tbl[data-sel-table="${tableKey}"]`);
+      if(!newTable) return;
+      this.tableEl = newTable;
+      this.cells = prevKeys.map(k=>this.cellAt(newTable, k.row, k.col)).filter(Boolean);
+      this.anchorEl = this.cells[this.cells.length - 1] || null;
+      this.anchor = this.anchorEl ? { row:Number(this.anchorEl.dataset.selRow), col:Number(this.anchorEl.dataset.selCol) } : null;
+      this.applyVisual();
+    });
   }
 };
 
@@ -1137,8 +1178,16 @@ document.addEventListener('mousedown', (e)=>{
   const td = e.target.closest('td.selectable');
   if(td){
     const ctrlOrCmd = e.ctrlKey || e.metaKey;
-    if(ctrlOrCmd) SEL.toggle(td);
-    else SEL.selectOnly(td);
+    if(ctrlOrCmd){
+      SEL.toggle(td);
+    } else if(SEL.cells.length > 1 && SEL.cells.includes(td)){
+      // clicking a cell that's already part of a multi-selection (to type a new
+      // value into it) shouldn't wipe the rest of the highlighted cells — keep
+      // them lit up so Ctrl+Enter can still push the typed value to all of them.
+      SEL.focusWithinSelection(td);
+    } else {
+      SEL.selectOnly(td);
+    }
   } else if(!e.target.closest('.select-toast')){
     // clicking anywhere outside a selectable cell drops the current selection
     if(SEL.cells.length) SEL.clear();
@@ -1149,6 +1198,13 @@ document.addEventListener('keydown', (e)=>{
   const ctrlOrCmd = e.ctrlKey || e.metaKey;
   if(!ctrlOrCmd) return;
   if(!SEL.cells.length) return;
+
+  // Ctrl/Cmd + Enter: apply whatever's typed in the active cell to every selected cell
+  if(e.key==='Enter'){
+    if(SEL.cells.length > 1){ e.preventDefault(); SEL.fillSelected(); }
+    return;
+  }
+
   // if the user is actively typing inside an input/textarea AND only a single cell is selected,
   // let the browser's native copy/paste handle normal text editing instead of intercepting.
   const activeInField = document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA');
