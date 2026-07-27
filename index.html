@@ -103,6 +103,13 @@ textarea{resize:vertical;line-height:1.65;}
 .btn-outline{background:transparent;color:var(--dark);border:1.5px solid var(--border);}
 .btn-outline:hover{border-color:var(--gold);color:var(--gold);}
 .btn-sm{padding:6px 14px;font-size:12px;}
+.add-row-bar{display:flex;align-items:center;gap:8px;}
+.add-row-count{
+  width:56px;flex:0 0 auto;padding:6px 8px;text-align:center;direction:ltr;
+  border:1.5px solid var(--border);border-radius:6px;font-family:'Cairo',sans-serif;
+  font-size:13px;font-weight:700;color:var(--dark);background:var(--bg);
+}
+.add-row-count:focus{border-color:var(--gold);background:#fff;}
 .btn-danger{background:#dc3545;color:#fff;}
 .btn-full{width:100%;}
 
@@ -542,9 +549,14 @@ const CAT = {
   },
 
   /* ── rows within an items-section ── */
-  addRow(catId, secId){
+  addRow(catId, secId, count){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
-    const s=c.sections.find(s=>s._id===secId); if(s){ s.rows.push(this.newRow()); this.render(); }
+    const s=c.sections.find(s=>s._id===secId); if(!s) return;
+    let n = parseInt(count, 10);
+    if(!Number.isFinite(n) || n < 1) n = 1;
+    if(n > 200) n = 200; // حد أقصى منطقي عشان مايتكتبش رقم غلط بالخطأ
+    for(let i=0; i<n; i++) s.rows.push(this.newRow());
+    this.render();
   },
   delRow(catId, secId, rowId){
     const c=STATE.categories.find(c=>c._id===catId); if(!c) return;
@@ -710,7 +722,10 @@ const CAT = {
             </tfoot>
           </table>
         </div>
-        <button class="btn btn-outline btn-sm" onclick="CAT.addRow(${cat._id},${section._id})">+ إضافة بند</button>
+        <div class="add-row-bar">
+          <input type="number" class="add-row-count" id="addcnt-${cat._id}-${section._id}" min="1" step="1" value="1" title="عدد البنود المطلوب إضافتها"/>
+          <button class="btn btn-outline btn-sm" onclick="CAT.addRow(${cat._id},${section._id}, $('addcnt-${cat._id}-${section._id}').value)">+ إضافة بند</button>
+        </div>
       </div>`;
   },
 
@@ -1138,6 +1153,13 @@ ${(forPrint || forEmail) ? '' : `<div class="dl-bar">
 
 /* ─── UI navigation ─── */
 const UI = {
+  /* بيتأكد إن التاريخ الجاي من الشيت شكله yyyy-MM-dd سليم قبل ما نحطه في input[type=date]،
+     لو مش سليم (تاريخ قديم اتخزن غلط، أو فاضي) بيرجع تاريخ انهارده بدل ما يبوظ الحقل أو يفضي بصمت */
+  safeIsoDate(v){
+    const s = String(v||'').slice(0,10);
+    const ok = /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s+'T00:00:00').getTime());
+    return ok ? s : new Date().toISOString().slice(0,10);
+  },
   show(id){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); $(id).classList.add('active'); },
   goHome(){   this.show('pg-home'); API.listCustomers(); },
   goEditor(){
@@ -1245,8 +1267,7 @@ const UI = {
   },
 
   openCustomer(c){
-    const today = new Date().toISOString().slice(0,10);
-    STATE.customer = { ...c, date: (c.date ? String(c.date).slice(0,10) : today), originalName: c.name };
+    STATE.customer = { ...c, date: this.safeIsoDate(c.date), originalName: c.name };
     $('b-engineer').value = c.engineer || '';
     $('b-address').value  = c.address  || '';
     $('b-date').value     = STATE.customer.date;
