@@ -934,15 +934,24 @@ const CAT = {
   }
 };
 
-/* ─── Multi-cell drag select + copy/paste (Google-Sheets style) ─────────────
-   Works on every q-tbl (items table). User mousedown on a .selectable <td>,
-   drags to another cell in the same table -> rectangular range gets highlighted.
-   Ctrl/Cmd+C copies the underlying values as TSV; Ctrl/Cmd+V pastes them back
-   starting at the anchor cell, growing right/down, writing through the same
-   CAT.setRow/setRowNum functions the app already uses so totals + saved state
-   stay in sync. Plain click on one cell just selects that single cell. ── */
+/* ─── Multi-cell select + copy/paste ─────────────────────────────────────
+   Works on every q-tbl (items table), across the whole table (description,
+   unit, qty, price, notes — every .selectable <td>).
+     • Plain click on a cell  -> selects ONLY that cell (drops any other selection).
+     • Ctrl/Cmd + click       -> ADDS that cell to the current selection (or removes
+                                  it if it was already selected), so you can pick any
+                                  number of scattered, non-adjacent cells anywhere in
+                                  the table — not just a dragged rectangle.
+     • Ctrl/Cmd + C           -> copies the value of the last-clicked cell.
+     • Ctrl/Cmd + V           -> if more than one cell is selected, pastes that SAME
+                                  copied content into every selected cell at once.
+                                  If only one cell is selected and the clipboard holds
+                                  a multi-line/tab grid (e.g. copied from Excel/Sheets),
+                                  it still grows right/down from that cell like before.
+   All writes go through the app's normal CAT.setRow/setRowNum-equivalent state
+   setter so totals + saved state stay in sync. ── */
 const SEL = {
-  active:false, tableEl:null, anchor:null, focus:null, cells:[],
+  tableEl:null, anchor:null, anchorEl:null, cells:[],
 
   toast(msg){
     let t = $('sel-toast');
@@ -971,51 +980,41 @@ const SEL = {
     if(this.anchorEl) this.anchorEl.classList.add('cell-anchor');
   },
 
-  rangeCells(table, r1,c1,r2,c2){
-    const rowMin=Math.min(r1,r2), rowMax=Math.max(r1,r2);
-    const colMin=Math.min(c1,c2), colMax=Math.max(c1,c2);
-    const out=[];
-    for(let r=rowMin;r<=rowMax;r++){
-      for(let c=colMin;c<=colMax;c++){
-        const td = this.cellAt(table, r, c);
-        if(td) out.push(td);
-      }
-    }
-    return out;
-  },
-
-  start(td, e){
+  /* plain click: select just this one cell, replacing any previous selection */
+  selectOnly(td){
     const table = td.closest('table.q-tbl');
     if(!table) return;
-    // starting a fresh selection on mousedown deselects any previous table's selection
-    this.active = true;
     this.tableEl = table;
     this.anchor = { row:Number(td.dataset.selRow), col:Number(td.dataset.selCol) };
     this.anchorEl = td;
-    this.focus = { ...this.anchor };
     this.cells = [td];
     this.applyVisual();
-    // don't hijack the click when the user is just placing a cursor in the input —
-    // only prevent default when they're clearly starting a drag (mousedown outside the input itself is rare
-    // since the input fills the td, so we rely on mousemove threshold instead)
   },
 
-  extend(td){
-    if(!this.active || !this.tableEl) return;
-    if(td.closest('table.q-tbl') !== this.tableEl) return;
-    const row = Number(td.dataset.selRow), col = Number(td.dataset.selCol);
-    if(this.focus && this.focus.row===row && this.focus.col===col) return;
-    this.focus = { row, col };
-    this.cells = this.rangeCells(this.tableEl, this.anchor.row, this.anchor.col, row, col);
+  /* ctrl/cmd + click: add this cell to the selection, or remove it if it's already in there */
+  toggle(td){
+    const table = td.closest('table.q-tbl');
+    if(!table) return;
+    // starting a multi-select in a different table than the current selection resets it
+    if(this.tableEl && this.tableEl !== table) this.clear();
+    this.tableEl = table;
+    const idx = this.cells.indexOf(td);
+    if(idx === -1){
+      this.cells.push(td);
+      this.anchorEl = td;
+      this.anchor = { row:Number(td.dataset.selRow), col:Number(td.dataset.selCol) };
+    } else {
+      this.cells.splice(idx, 1);
+      if(this.anchorEl === td){
+        this.anchorEl = this.cells[this.cells.length - 1] || null;
+        this.anchor = this.anchorEl ? { row:Number(this.anchorEl.dataset.selRow), col:Number(this.anchorEl.dataset.selCol) } : null;
+      }
+    }
     this.applyVisual();
-  },
-
-  end(){
-    this.active = false;
   },
 
   clear(){
-    this.tableEl=null; this.anchor=null; this.focus=null; this.cells=[]; this.anchorEl=null;
+    this.tableEl=null; this.anchor=null; this.anchorEl=null; this.cells=[];
     this.clearVisual();
   },
 
@@ -1026,28 +1025,16 @@ const SEL = {
   },
 
   async copy(){
-    if(!this.cells.length || !this.tableEl) return;
-    const rowMin = Math.min(...this.cells.map(td=>Number(td.dataset.selRow)));
-    const rowMax = Math.max(...this.cells.map(td=>Number(td.dataset.selRow)));
-    const colMin = Math.min(...this.cells.map(td=>Number(td.dataset.selCol)));
-    const colMax = Math.max(...this.cells.map(td=>Number(td.dataset.selCol)));
-    const lines = [];
-    for(let r=rowMin; r<=rowMax; r++){
-      const line=[];
-      for(let c=colMin; c<=colMax; c++){
-        const td = this.cellAt(this.tableEl, r, c);
-        line.push(td ? this.cellValue(td) : '');
-      }
-      lines.push(line.join('\t'));
-    }
-    const tsv = lines.join('\n');
+    if(!this.cells.length) return;
+    const source = this.anchorEl || this.cells[this.cells.length - 1];
+    const value = this.cellValue(source);
     try{
-      await navigator.clipboard.writeText(tsv);
-      this.toast('✔ تم النسخ (' + this.cells.length + ' خلية)');
+      await navigator.clipboard.writeText(value);
+      this.toast('✔ تم النسخ');
     }catch(e){
       // fallback for browsers/contexts without clipboard permission
       const ta=document.createElement('textarea');
-      ta.value=tsv; ta.style.position='fixed'; ta.style.opacity='0';
+      ta.value=value; ta.style.position='fixed'; ta.style.opacity='0';
       document.body.appendChild(ta); ta.select();
       try{ document.execCommand('copy'); this.toast('✔ تم النسخ'); }catch(e2){ this.toast('⚠ تعذر النسخ'); }
       document.body.removeChild(ta);
@@ -1075,42 +1062,72 @@ const SEL = {
   },
 
   async paste(){
-    if(!this.anchor || !this.tableEl) return;
+    if(!this.cells.length || !this.tableEl) return;
     let text = '';
     try{ text = await navigator.clipboard.readText(); }
     catch(e){ this.toast('⚠ محتاج إذن الوصول للحافظة، جرب تلصق بـ Ctrl+V جوه خلية واحدة'); return; }
     if(!text) return;
 
-    const rows = text.replace(/\r/g,'').split('\n').filter((l,i,arr)=> !(i===arr.length-1 && l===''));
-    const grid = rows.map(line=>line.split('\t'));
-    if(!grid.length) return;
-
-    const startRow = this.anchor.row, startCol = this.anchor.col;
+    const tableKey = this.tableEl.dataset.selTable;
     let touched = 0;
-    grid.forEach((line, dr)=>{
-      line.forEach((val, dc)=>{
-        const td = this.cellAt(this.tableEl, startRow+dr, startCol+dc);
-        if(!td) return; // out of table bounds (no more rows/cols there) -> skip silently
-        this.writeCell(td, val);
-        touched++;
+    let targetRows = { row:this.anchor.row, col:this.anchor.col };
+    let gridRowSpan = 1, gridColSpan = 1;
+
+    if(this.cells.length > 1){
+      // multiple cells picked with Ctrl/Cmd+click -> write the exact same content
+      // into every one of them at once, wherever they are in the table
+      const val = text.replace(/\r/g,'');
+      this.cells.forEach(td=>{ this.writeCell(td, val); touched++; });
+    } else {
+      // single selected cell -> normal spreadsheet-style paste: a plain value fills
+      // just that cell, a tab/newline grid (e.g. copied from Excel/Sheets) grows
+      // right/down starting from it
+      const rows = text.replace(/\r/g,'').split('\n').filter((l,i,arr)=> !(i===arr.length-1 && l===''));
+      const grid = rows.map(line=>line.split('\t'));
+      if(!grid.length) return;
+      const startRow = this.anchor.row, startCol = this.anchor.col;
+      gridRowSpan = grid.length;
+      gridColSpan = Math.max(...grid.map(l=>l.length));
+      grid.forEach((line, dr)=>{
+        line.forEach((val, dc)=>{
+          const td = this.cellAt(this.tableEl, startRow+dr, startCol+dc);
+          if(!td) return; // out of table bounds -> skip silently
+          this.writeCell(td, val);
+          touched++;
+        });
       });
-    });
+    }
 
     if(touched){
+      // remember which cells were selected (by row/col) so we can re-highlight them after re-render
+      const prevKeys = this.cells.map(td=>({row:Number(td.dataset.selRow), col:Number(td.dataset.selCol)}));
+      const wasMulti = this.cells.length > 1;
+
       // re-render through the normal CAT pipeline so totals, formatting, and row numbers stay correct
       CAT.render();
-      this.toast('✔ تم اللصق (' + touched + ' خلية)');
-      // re-apply a visual selection over the pasted range after re-render (new DOM nodes)
+      this.toast(wasMulti ? ('✔ تم اللصق في ' + touched + ' خلية') : '✔ تم اللصق');
+
+      // re-apply the visual selection after re-render (new DOM nodes)
       requestAnimationFrame(()=>{
-        const newTable = document.querySelector(`table.q-tbl[data-sel-table="${this.tableEl.dataset.selTable}"]`);
-        if(newTable){
-          this.tableEl = newTable;
-          const endRow = startRow + grid.length - 1;
-          const endCol = startCol + Math.max(...grid.map(l=>l.length)) - 1;
-          this.cells = this.rangeCells(newTable, startRow, startCol, endRow, endCol);
-          this.anchorEl = this.cellAt(newTable, startRow, startCol);
-          this.applyVisual();
+        const newTable = document.querySelector(`table.q-tbl[data-sel-table="${tableKey}"]`);
+        if(!newTable) return;
+        this.tableEl = newTable;
+        if(wasMulti){
+          this.cells = prevKeys.map(k=>this.cellAt(newTable, k.row, k.col)).filter(Boolean);
+        } else {
+          const endRow = targetRows.row + gridRowSpan - 1;
+          const endCol = targetRows.col + gridColSpan - 1;
+          this.cells = [];
+          for(let r=targetRows.row; r<=endRow; r++){
+            for(let c=targetRows.col; c<=endCol; c++){
+              const td = this.cellAt(newTable, r, c);
+              if(td) this.cells.push(td);
+            }
+          }
         }
+        this.anchorEl = this.cellAt(newTable, targetRows.row, targetRows.col) || this.cells[0] || null;
+        this.anchor = this.anchorEl ? { row:Number(this.anchorEl.dataset.selRow), col:Number(this.anchorEl.dataset.selCol) } : null;
+        this.applyVisual();
       });
     }
   }
@@ -1119,18 +1136,14 @@ const SEL = {
 document.addEventListener('mousedown', (e)=>{
   const td = e.target.closest('td.selectable');
   if(td){
-    SEL.start(td, e);
+    const ctrlOrCmd = e.ctrlKey || e.metaKey;
+    if(ctrlOrCmd) SEL.toggle(td);
+    else SEL.selectOnly(td);
   } else if(!e.target.closest('.select-toast')){
     // clicking anywhere outside a selectable cell drops the current selection
     if(SEL.cells.length) SEL.clear();
   }
 });
-document.addEventListener('mouseover', (e)=>{
-  if(!SEL.active) return;
-  const td = e.target.closest('td.selectable');
-  if(td) SEL.extend(td);
-});
-document.addEventListener('mouseup', ()=>{ if(SEL.active) SEL.end(); });
 
 document.addEventListener('keydown', (e)=>{
   const ctrlOrCmd = e.ctrlKey || e.metaKey;
