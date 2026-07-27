@@ -87,8 +87,8 @@ body{
 .field .note{font-size:10px;color:var(--mid);margin-top:3px;}
 
 input,textarea{
-  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:6px;
-  font-family:'Cairo',sans-serif;font-size:14px;color:var(--dark);
+  width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:6px;
+  font-family:'Cairo',sans-serif;font-size:15px;color:var(--dark);
   background:var(--bg);transition:border-color .2s;outline:none;
   direction:rtl;text-align:right;
 }
@@ -113,20 +113,20 @@ textarea{resize:vertical;line-height:1.65;}
 .step.done:hover{background:#EAE9E4;}
 
 .q-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:14px;}
-table.q-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:720px;}
+table.q-tbl{width:100%;border-collapse:collapse;font-size:15px;min-width:760px;}
 .q-tbl thead tr{background:var(--green);color:#fff;}
-.q-tbl thead th{padding:9px 8px;font-weight:600;text-align:right;white-space:nowrap;}
+.q-tbl thead th{padding:11px 9px;font-weight:600;text-align:right;white-space:nowrap;font-size:13px;}
 .q-tbl tbody tr{border-bottom:1px solid var(--border);}
 .q-tbl tbody tr:hover{background:#F2F1EE;}
-.q-tbl td{padding:7px 6px;vertical-align:top;}
+.q-tbl td{padding:9px 7px;vertical-align:top;}
 .q-tbl td input,.q-tbl td textarea{
   background:#fff;border:1.5px solid var(--border);border-radius:5px;
-  font-family:'Cairo',sans-serif;font-size:13px;color:var(--dark);
-  direction:rtl;text-align:right;width:100%;padding:5px 7px;outline:none;
+  font-family:'Cairo',sans-serif;font-size:15px;color:var(--dark);
+  direction:rtl;text-align:right;width:100%;padding:8px 10px;outline:none;
 }
 .q-tbl td input[type=number],.q-tbl td input.ltr{direction:ltr;text-align:left;}
 .q-tbl td input:focus,.q-tbl td textarea:focus{border-color:var(--gold);}
-.q-tbl td textarea{resize:vertical;min-height:56px;line-height:1.6;}
+.q-tbl td textarea{resize:vertical;min-height:110px;line-height:1.75;}
 .q-tbl td.num-cell{font-weight:700;white-space:nowrap;direction:ltr;text-align:left;padding-top:12px;}
 .q-tbl tr.notes-merge-row{border-bottom:none;}
 .q-tbl tr.notes-merge-row:hover{background:transparent;}
@@ -835,9 +835,9 @@ function buildPdfHtml(forPrint, forEmail=false){
   const c   = STATE.customer || {};
   const dlr = dollar();
   const date= new Date().toLocaleDateString('en-GB');
-  const notes = CFG.noteLines.map(l=>`<div style="margin-bottom:6px;">• ${l.replace('{DOLLAR}',dlr)}</div>`).join('');
-  const generalNotes = '<div style="font-weight:700;margin-bottom:8px;">ملاحظات عامة</div>' +
-    CFG.generalNotes.map((l,i)=>`<div style="margin-bottom:6px;">${i+1}- ${l}</div>`).join('');
+  const allNotes = [...CFG.noteLines.map(l=>l.replace('{DOLLAR}',dlr)), ...CFG.generalNotes];
+  const generalNotes = '<div class="notes-title">ملاحظات عامة</div>' +
+    allNotes.map((l,i)=>`<div style="margin-bottom:8px;"><b>${i+1}-</b> ${l}</div>`).join('');
 
   const grand = CAT.grand();
 
@@ -861,22 +861,23 @@ function buildPdfHtml(forPrint, forEmail=false){
           } else {
             const span = Math.max(1, Number(r.notesSpan)||1);
             const rowspanAttr = span > 1 ? ` rowspan="${span}"` : '';
-            const nt = (r.notes||'').replace(/\n/g,'<br>');
-            notesCell = `<td${rowspanAttr} style="padding:7px 6px;font-size:11px;vertical-align:middle;">${nt}</td>`;
+            const nt = (r.notes||'').replace(/\n/g,'<br>') || '—';
+            notesCell = `<td${rowspanAttr} style="vertical-align:middle;">${nt}</td>`;
             if(span > 1) skipNotes = span - 1;
           }
           rowsHtml+=`
             <tr style="background:${bg};border-bottom:1px solid #D3D1C7;">
-              <td style="padding:7px 6px;text-align:center;color:#6B6B68;font-size:11px;">${i+1}</td>
-              <td style="padding:7px 6px;">${desc}</td>
-              <td style="padding:7px 6px;font-size:11px;">${h(r.unit)||'—'}</td>
-              <td style="padding:7px 6px;text-align:center;font-size:11px;">${r.qty||0}</td>
-              <td style="padding:7px 6px;direction:ltr;text-align:left;font-size:11px;">${fmt(cost)}</td>
-              <td style="padding:7px 6px;direction:ltr;text-align:left;font-weight:700;font-size:11px;">${fmt(tot)}</td>
+              <td style="color:#6B6B68;">${i+1}</td>
+              <td>${desc}</td>
+              <td>${h(r.unit)||'—'}</td>
+              <td>${r.qty||0}</td>
+              <td class="ltr">${fmt(cost)}</td>
+              <td class="ltr" style="font-weight:700;">${fmt(tot)}</td>
               ${notesCell}
             </tr>`;
         });
         const secLabel = h(ordinal(idx)) + (section.title? (': '+h(section.title)) : '');
+        if(idx>0) sectionsHtml += `<hr class="section-divider"/>`;
         sectionsHtml += `
           <div class="cat-title-bar">${secLabel}</div>
           <div class="items-wrap"><table class="items">
@@ -904,32 +905,20 @@ function buildPdfHtml(forPrint, forEmail=false){
         const base   = CAT.effectiveBase(cat, section, idx);
         const amount = base * (num(section.percent)||0) / 100;
         const secLabel = h(ordinal(idx)) + ': ' + h(section.title||'نسبة مهندس الإشراف');
+        if(idx>0) sectionsHtml += `<hr class="section-divider"/>`;
         sectionsHtml += `
-          <div class="cat-title-bar">${secLabel}</div>
-          <div class="items-wrap"><table class="items">
-            <thead>
-              <tr>
-                <th>التوصيف</th>
-                <th class="center" style="width:15%;">النسبة %</th>
-                <th class="ltr" style="width:22%;">إجمالي المصروفات</th>
-                <th class="ltr" style="width:22%;">الإجمالي نسبة المهندس</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="background:#ffffff;border-bottom:1px solid #D3D1C7;">
-                <td style="padding:7px 6px;">${h(section.desc||'اشراف هندسي')}</td>
-                <td style="padding:7px 6px;text-align:center;">${num(section.percent)}%</td>
-                <td style="padding:7px 6px;direction:ltr;text-align:left;">${fmt(base)}</td>
-                <td style="padding:7px 6px;direction:ltr;text-align:left;font-weight:700;">${fmt(amount)}</td>
-              </tr>
-            </tbody>
-          </table></div>`;
+          <div class="comm-strip">
+            <span>${h(section.desc||'اشراف هندسي')}</span>
+            <span class="comm-pct">${num(section.percent)}%</span>
+            <span>من إجمالي المصروفات <b>${fmt(base)}</b> جنيه</span>
+            <span>= <b>${fmt(amount)}</b> جنيه</span>
+          </div>`;
       }
     });
 
-    sectionsHtml += `<div class="notes-box" style="margin-top:4px;margin-bottom:20px;font-weight:700;direction:ltr;text-align:left;background:#46453F;color:#F1EFE8;">إجمالي المبلغ — ${h(cat.name)}: ${fmt(CAT.catTotal(cat))} جنيه</div>`;
+    sectionsHtml += `<div class="notes-box" style="margin-top:10px;margin-bottom:8px;font-weight:700;text-align:center;background:#46453F;color:#F1EFE8;">إجمالي المبلغ — ${h(cat.name)}: ${fmt(CAT.catTotal(cat))} جنيه</div>`;
 
-    categoriesHtml += `<div class="cat-name-bar">${h(cat.name)}</div>${sectionsHtml}`;
+    categoriesHtml += `<div class="cat-divider"></div><div class="cat-name-bar">${h(cat.name)}</div>${sectionsHtml}`;
   });
 
   let summaryHtml = '';
@@ -937,28 +926,26 @@ function buildPdfHtml(forPrint, forEmail=false){
     let summaryRows='';
     STATE.categories.forEach((cat,i)=>{
       const ct = CAT.catTotal(cat);
-      const pct = grand>0 ? (ct/grand*100) : 0;
       const bg=i%2===0?'#ffffff':'#F4F3F1';
       summaryRows += `
         <tr style="background:${bg};border-bottom:1px solid #D3D1C7;">
-          <td style="padding:7px 6px;text-align:center;color:#6B6B68;font-size:11px;">${i+1}</td>
-          <td style="padding:7px 6px;font-weight:700;">${h(cat.name)}</td>
-          <td style="padding:7px 6px;direction:ltr;text-align:left;font-weight:700;">${fmt(ct)}</td>
-          <td style="padding:7px 6px;text-align:center;">${pct.toFixed(0)}%</td>
+          <td style="color:#6B6B68;">${i+1}</td>
+          <td style="font-weight:700;">${h(cat.name)}</td>
+          <td class="ltr" style="font-weight:700;">${fmt(ct)}</td>
         </tr>`;
     });
     summaryHtml = `
-      <div class="cat-title-bar" style="margin-top:22px;">إجمالي البنود</div>
+      <hr class="section-divider"/>
+      <div class="cat-title-bar" style="margin-top:24px;">إجمالي البنود</div>
       <div class="items-wrap"><table class="items">
         <thead><tr>
           <th style="width:8%;">#</th><th>القسم</th>
-          <th class="ltr" style="width:22%;">الإجمالي</th>
-          <th class="center" style="width:14%;">النسبة</th>
+          <th class="ltr" style="width:28%;">الإجمالي</th>
         </tr></thead>
         <tbody>${summaryRows}</tbody>
         <tfoot><tr>
           <td colspan="2" style="text-align:right;">الإجمالي الكلي</td>
-          <td class="ltr">${fmt(grand)}</td><td></td>
+          <td class="ltr">${fmt(grand)}</td>
         </tr></tfoot>
       </table></div>`;
   }
@@ -992,41 +979,59 @@ function buildPdfHtml(forPrint, forEmail=false){
     .brand-title span { color:#2C7BC9; }
     .brand-sub { position:relative; font-size:9px; letter-spacing:3px; color:#8FBEE3; text-transform:uppercase; margin-top:4px; direction:ltr; }
 
-    .client-box { background:#EAE9E4; border-right:4px solid #2C7BC9; padding:12px 16px; margin-bottom:6px; direction:rtl; text-align:right; }
-    .client-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; justify-content:flex-start; flex-direction:row; }
+    .client-box { background:#EAE9E4; border-right:4px solid #2C7BC9; padding:14px 18px; margin-bottom:18px; direction:rtl; text-align:center; border-radius:5px; }
+    .client-row { display:flex; align-items:baseline; gap:8px; margin-bottom:7px; justify-content:center; flex-direction:row; }
     .client-row:last-child { margin-bottom:0; }
-    .client-lbl { font-size:11px; color:#6B6B68; font-weight:700; letter-spacing:1px; white-space:nowrap; }
-    .client-val { font-size:14px; font-weight:700; }
+    .client-lbl { font-size:12px; color:#6B6B68; font-weight:700; letter-spacing:1px; white-space:nowrap; }
+    .client-val { font-size:15px; font-weight:700; }
 
     .date-row { font-size:12px; color:#6B6B68; direction:ltr; text-align:left; margin-bottom:14px; }
     .intro { font-size:13px; color:#6B6B68; line-height:1.9; text-align:center; margin-bottom:14px; }
 
-    .cat-name-bar{ background:#2C7BC9; color:#fff; padding:9px 14px; font-weight:700; font-size:15px;
-      border-radius:6px; direction:rtl; text-align:right; margin-top:22px; margin-bottom:4px; font-family:'Playfair Display',Georgia,serif; letter-spacing:.5px; }
-    .cat-title-bar{ background:#46453F; color:#fff; padding:8px 12px; font-weight:700; font-size:13px;
-      border-radius:5px 5px 0 0; direction:rtl; text-align:right; margin-top:12px; }
+    /* clear colored divider before every new category */
+    .cat-divider{ height:3px; background:linear-gradient(90deg,transparent,#2C7BC9,transparent); margin:28px 0 0; border-radius:3px; }
 
-    table.items { width:100%; min-width:600px; border-collapse:collapse; font-size:13px; direction:rtl; margin-bottom:14px; table-layout:fixed; display:table !important; }
-    .items-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .cat-name-bar{ background:#2C7BC9; color:#fff; padding:12px 14px; font-weight:700; font-size:17px;
+      border-radius:6px; direction:rtl; text-align:center; margin-top:14px; margin-bottom:10px; font-family:'Playfair Display',Georgia,serif; letter-spacing:.5px; }
+
+    /* thin colored rule between one section and the next, inside the same category */
+    .section-divider{ border:none; border-top:1.5px dashed #B9B6A9; margin:16px 0 0; }
+
+    .cat-title-bar{ background:#46453F; color:#fff; padding:10px 14px; font-weight:700; font-size:14px;
+      border-radius:5px 5px 0 0; direction:rtl; text-align:center; margin-top:16px; letter-spacing:.3px; }
+
+    table.items { width:100%; min-width:600px; border-collapse:collapse; font-size:13.5px; direction:rtl; margin-bottom:6px; table-layout:fixed; display:table !important; }
+    .items-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:16px; }
 
     @media print {
       .items-wrap { overflow:visible !important; }
-      table.items { min-width:0 !important; width:100% !important; font-size:10px !important; }
-      table.items thead th, table.items tbody td, table.items tfoot td { padding:4px 3px !important; }
+      table.items { min-width:0 !important; width:100% !important; font-size:12.5px !important; }
+      table.items thead th, table.items tbody td, table.items tfoot td { padding:7px 6px !important; }
     }
 
     table.items thead tr { background:#46453F; color:#fff; }
-    table.items thead th { padding:6px 4px; text-align:right; font-weight:600; white-space:nowrap; font-size:11px; }
-    table.items thead th.ltr { direction:ltr; text-align:left; }
+    table.items thead th { padding:9px 6px; text-align:center; font-weight:700; white-space:nowrap; font-size:12.5px; }
+    table.items thead th.ltr { direction:ltr; text-align:center; }
     table.items thead th.center { text-align:center; }
-    table.items tbody td { padding:6px 4px; vertical-align:top; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; font-size:11px; }
-    table.items tbody td:nth-child(2) { white-space:normal; min-width:150px; word-break:normal; overflow-wrap:break-word; line-height:1.6; }
+    table.items thead th:nth-child(2) { text-align:right; }
+    table.items tbody td { padding:9px 6px; vertical-align:middle; word-wrap:break-word; overflow-wrap:break-word; word-break:break-word; font-size:12.5px; text-align:center; }
+    table.items tbody td:nth-child(2) { white-space:normal; min-width:150px; word-break:normal; overflow-wrap:break-word; line-height:1.75; text-align:right; }
+    table.items tbody td:last-child { white-space:normal; text-align:right; }
     table.items tfoot tr { background:#5F5E5A; color:#F1EFE8; }
-    table.items tfoot td { padding:9px 7px; font-weight:700; font-size:13px; }
-    table.items tfoot td.ltr { direction:ltr; text-align:left; }
+    table.items tfoot td { padding:11px 8px; font-weight:700; font-size:14px; text-align:center; }
+    table.items tfoot td:first-child { text-align:right; }
+    table.items tfoot td.ltr { direction:ltr; text-align:center; }
 
-    .notes-box { background:#EAE9E4; border:1px solid #D3D1C7; border-radius:5px; padding:13px 16px; font-size:12px; color:#6B6B68; line-height:2.1; margin-bottom:16px; direction:rtl; text-align:right; max-height:none !important; overflow:visible !important; display:block !important; }
+    .notes-box { background:#EAE9E4; border:1px solid #D3D1C7; border-radius:5px; padding:16px 18px; font-size:13px; color:#6B6B68; line-height:2.3; margin-bottom:16px; direction:rtl; text-align:right; max-height:none !important; overflow:visible !important; display:block !important; }
+    .notes-box .notes-title{ font-weight:700; font-size:14.5px; color:#46453F; text-align:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1.5px dashed #B9B6A9; }
     .footer { text-align:center; font-size:13px; color:#2C7BC9; font-family:'Playfair Display',Georgia,serif; letter-spacing:1px; direction:ltr; }
+
+    /* compact strip for the supervision-fee section: a small clear divider line, not a full table */
+    .comm-strip{ background:#F4F3F1; border:1.5px solid #D3D1C7; border-right:5px solid #2C7BC9; border-radius:5px;
+      padding:10px 16px; margin-top:10px; margin-bottom:16px; display:flex; flex-wrap:wrap; align-items:center;
+      justify-content:center; gap:10px; text-align:center; font-size:12.5px; color:#46453F; }
+    .comm-strip b{ color:#2C7BC9; font-size:13.5px; }
+    .comm-strip .comm-pct{ background:#2C7BC9; color:#fff; font-weight:700; padding:3px 12px; border-radius:20px; font-size:12px; }
 
     .dl-bar { position:fixed; bottom:0; left:0; right:0; background:#5F5E5A; padding:14px 24px; display:flex; justify-content:center; gap:14px; z-index:999; box-shadow:0 -4px 20px rgba(0,0,0,.3); }
     .dl-bar button { border:none; padding:13px 36px; font-size:15px; font-family:'Cairo',sans-serif; border-radius:8px; cursor:pointer; font-weight:700; letter-spacing:1px; }
@@ -1054,8 +1059,7 @@ function buildPdfHtml(forPrint, forEmail=false){
   ${categoriesHtml}
   ${summaryHtml}
 
-  <div class="notes-box" style="margin-top:16px;">${notes}</div>
-  <div class="notes-box" style="margin-top:10px;">${generalNotes}</div>
+  <div class="notes-box" style="margin-top:20px;">${generalNotes}</div>
 
   <p class="intro" style="margin-bottom:0;">نحن سعداء بالعمل معكم، ونتطلع إلى استكمال الأعمال معًا على خير.</p>
 
