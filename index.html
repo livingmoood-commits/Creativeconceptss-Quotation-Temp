@@ -934,7 +934,7 @@ function buildPdfHtml(forPrint, forEmail=false){
     sectionsHtml += `<div class="notes-box" style="margin-top:10px;margin-bottom:8px;font-weight:700;text-align:center;background:#46453F;color:#F1EFE8;">إجمالي المبلغ — ${h(cat.name)}: ${fmt(CAT.catTotal(cat))} جنيه</div>`;
 
     const estimateBar = cat.estimateTitle ? `<div class="estimate-title-bar">${h(cat.estimateTitle)}</div>` : '';
-    categoriesHtml += `<div class="cat-divider"></div>${estimateBar}<div class="cat-name-bar">${h(cat.name)}</div>${sectionsHtml}`;
+    categoriesHtml += `<div class="cat-divider"></div><div class="cat-name-bar">${h(cat.name)}</div>${estimateBar}${sectionsHtml}`;
   });
 
   let summaryHtml = '';
