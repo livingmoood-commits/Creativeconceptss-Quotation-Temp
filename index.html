@@ -469,6 +469,19 @@ body.gs-multi .q-tbl td.gs-selected{background:rgba(44,123,201,.14);}
       <span class="note" style="display:block;">نسبة مهندس الإشراف بقت جزء داخل كل قسم — دوس "+ إضافة نسبة مهندس الإشراف" جوه القسم اللي عايزها فيه، بالظبط زي الإكسيل.</span>
     </div>
 
+    <div class="card" id="private-summary-card" style="border:1.5px dashed var(--border);">
+      <div class="card-title" style="margin-bottom:12px;">📊 ملخص خاص</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;font-size:14px;font-weight:700;">
+        <span>إجمالي المصروفات (بدون نسبة الإشراف)</span>
+        <span id="priv-expenses" style="direction:ltr;color:var(--dark);">0 جنيه</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;font-size:14px;font-weight:700;">
+        <span>إجمالي نسبة الإشراف</span>
+        <span id="priv-commission" style="direction:ltr;color:var(--gold);">0 جنيه</span>
+      </div>
+      <span class="note" style="display:block;margin-top:6px;">الملخص ده للعرض عندك بس هنا في الموقع — مش بيتحفظ في الشيت، ومش بيظهر في الـ PDF ولا الإيميل.</span>
+    </div>
+
     <div class="action-bar">
       <button class="btn btn-outline" onclick="UI.goHome()">← رجوع</button>
       <button class="btn btn-dark" onclick="API.save()">💾 حفظ في الشيت</button>
@@ -815,6 +828,22 @@ const CAT = {
   catTotal(cat){ return cat.sections.reduce((s,sec,idx)=>s+this.sectionTotal(cat,sec,idx),0); },
   grand(){ return STATE.categories.reduce((s,c)=>s+this.catTotal(c),0); },
 
+  /* ── private on-screen-only summary (not saved to the sheet, not in the PDF/email) ── */
+  expensesGrand(){
+    let s=0;
+    STATE.categories.forEach(cat=>{
+      cat.sections.forEach(sec=>{ if(sec.type==='items') s += this.sectionItemsTotal(sec); });
+    });
+    return s;
+  },
+  commissionGrand(){
+    let s=0;
+    STATE.categories.forEach(cat=>{
+      cat.sections.forEach((sec,idx)=>{ if(sec.type==='commission') s += this.sectionTotal(cat,sec,idx); });
+    });
+    return s;
+  },
+
   renderChips(){
     const box=$('quick-cat-chips'); box.innerHTML='';
     CFG.quickCategories.forEach(name=>{
@@ -983,6 +1012,10 @@ const CAT = {
     const gt = $('grand-total');
     gt.textContent = fmt(this.grand()) + ' جنيه';
     gt.classList.remove('bump'); void gt.offsetWidth; gt.classList.add('bump');
+
+    /* private on-screen-only summary — never sent to save(), buildPdfHtml(), or the email */
+    const pe = $('priv-expenses'); if(pe) pe.textContent = fmt(this.expensesGrand()) + ' جنيه';
+    const pc = $('priv-commission'); if(pc) pc.textContent = fmt(this.commissionGrand()) + ' جنيه';
   },
 
   /* flatten categories -> rows array expected by the backend sheet schema */
