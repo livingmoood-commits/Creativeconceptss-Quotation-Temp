@@ -1178,23 +1178,6 @@ const SEL = {
     return el ? el.value : '';
   },
 
-  async copy(){
-    if(!this.cells.length) return;
-    const source = this.anchorEl || this.cells[this.cells.length - 1];
-    const value = this.cellValue(source);
-    try{
-      await navigator.clipboard.writeText(value);
-      this.toast('✔ تم النسخ');
-    }catch(e){
-      // fallback for browsers/contexts without clipboard permission
-      const ta=document.createElement('textarea');
-      ta.value=value; ta.style.position='fixed'; ta.style.opacity='0';
-      document.body.appendChild(ta); ta.select();
-      try{ document.execCommand('copy'); this.toast('✔ تم النسخ'); }catch(e2){ this.toast('⚠ تعذر النسخ'); }
-      document.body.removeChild(ta);
-    }
-  },
-
   /* write a value into a cell through the app's normal state setters, then refresh its DOM display */
   writeCell(td, value){
     const table = td.closest('table.q-tbl');
@@ -1215,12 +1198,10 @@ const SEL = {
     }
   },
 
-  async paste(){
-    if(!this.cells.length || !this.tableEl) return;
-    let text = '';
-    try{ text = await navigator.clipboard.readText(); }
-    catch(e){ this.toast('⚠ محتاج إذن الوصول للحافظة، جرب تلصق بـ Ctrl+V جوه خلية واحدة'); return; }
-    if(!text) return;
+  /* core paste logic — receives plain text straight from the native browser paste
+     event (no clipboard-permission prompt needed, works everywhere reliably) */
+  applyPaste(text){
+    if(!this.cells.length || !this.tableEl || !text) return;
 
     const tableKey = this.tableEl.dataset.selTable;
     let touched = 0;
@@ -1355,20 +1336,39 @@ document.addEventListener('keydown', (e)=>{
     if(SEL.cells.length > 1){ e.preventDefault(); SEL.fillSelected(); }
     return;
   }
+  // Ctrl/Cmd + C / V are handled by the native 'copy'/'paste' events below —
+  // that works everywhere without asking for clipboard permission.
+});
 
-  // if the user is actively typing inside an input/textarea AND only a single cell is selected,
-  // let the browser's native copy/paste handle normal text editing instead of intercepting.
-  const activeInField = document.activeElement && (document.activeElement.tagName==='INPUT' || document.activeElement.tagName==='TEXTAREA');
+/* الاعتماد على أحداث المتصفح الطبيعية copy/paste بدل navigator.clipboard (اللي بتحتاج إذن
+   وممكن ترفض بصمت) — كده اللصق والنسخ بيشتغلوا في كل المتصفحات من غير أي مشاكل صلاحيات */
+document.addEventListener('copy', (e)=>{
+  if(!SEL.cells.length) return;
+  const active = document.activeElement;
+  const activeInField = active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA');
   const singleCell = SEL.cells.length===1;
-  if(e.key==='c' || e.key==='C'){
-    if(activeInField && singleCell) return; // allow normal text copy inside one field
-    e.preventDefault();
-    SEL.copy();
-  } else if(e.key==='v' || e.key==='V'){
-    if(activeInField && singleCell) return; // allow normal text paste inside one field
-    e.preventDefault();
-    SEL.paste();
-  }
+  const hasPartialTextSelection = activeInField && active.selectionStart !== active.selectionEnd;
+  if(singleCell && hasPartialTextSelection) return; // المستخدم محدد جزء من النص جوه الحقل — سيب النسخ العادي يشتغل
+
+  const source = SEL.anchorEl || SEL.cells[SEL.cells.length - 1];
+  const value = SEL.cellValue(source);
+  e.clipboardData.setData('text/plain', value);
+  e.preventDefault();
+  SEL.toast('✔ تم النسخ');
+});
+
+document.addEventListener('paste', (e)=>{
+  if(!SEL.cells.length || !SEL.tableEl) return;
+  const text = (e.clipboardData || window.clipboardData)?.getData('text/plain') || '';
+  if(!text) return;
+
+  // لو خلية واحدة بس متحددة، والمنسوخ نص عادي بسيط (مفيهوش تاب/سطور من إكسيل)،
+  // سيب اللصق الطبيعي يشتغل جوه الحقل عشان يحافظ على مكان المؤشر
+  const isGrid = /\t|\n/.test(text.replace(/\r/g,'').replace(/\n$/,''));
+  if(SEL.cells.length === 1 && !isGrid) return;
+
+  e.preventDefault();
+  SEL.applyPaste(text);
 });
 
 /* ─── PDF HTML builder ─── */
