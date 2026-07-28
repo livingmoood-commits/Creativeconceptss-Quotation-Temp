@@ -1330,6 +1330,15 @@ document.addEventListener('mousedown', (e)=>{
     } else {
       SEL.selectOnly(td);
     }
+    // الضغط في أي حتة جوه الخلية (سواء اتحددت لوحدها أو كجزء من تحديد أكتر من خلية)
+    // لازم يخليك تكتب فيها عادي على طول، من غير ما تحتاج تدوس تاني بالظبط جوه الإنبوت
+    if(!ctrlOrCmd){
+      const field = td.querySelector('input,textarea');
+      if(field && e.target !== field){
+        e.preventDefault();
+        field.focus();
+      }
+    }
   } else if(!e.target.closest('.select-toast')){
     // clicking anywhere outside a selectable cell drops the current selection
     if(SEL.cells.length) SEL.clear();
@@ -1552,6 +1561,8 @@ function buildPdfHtml(forPrint, forEmail=false){
       .cat-divider-first{ page-break-before:avoid; break-before:avoid; }
       .cat-name-bar, .cat-title-bar, .estimate-title-bar, .comm-ord-label{ page-break-after:avoid; break-after:avoid; }
       table.items tr, .comm-card, .notes-box{ page-break-inside:avoid; break-inside:avoid; }
+      /* إجمالي البنود + الملاحظات العامة يفضلوا مع بعض في نفس الصفحة، من غير فراغ كبير بينهم */
+      .summary-notes-group{ page-break-inside:avoid; break-inside:avoid; }
     }
 
     .estimate-title-bar{ background:#8C9AA6; color:#fff; padding:11px 14px; font-weight:700; font-size:14.5px;
@@ -1633,9 +1644,11 @@ function buildPdfHtml(forPrint, forEmail=false){
   </div>
 
   ${categoriesHtml}
-  ${summaryHtml}
 
-  <div class="notes-box" style="margin-top:20px;">${generalNotes}</div>
+  <div class="summary-notes-group">
+    ${summaryHtml}
+    <div class="notes-box" style="margin-top:20px;">${generalNotes}</div>
+  </div>
 
   <p class="intro" style="margin-bottom:0;">نحن سعداء بالعمل معكم، ونتطلع إلى استكمال الأعمال معًا على خير.</p>
 
@@ -1907,9 +1920,9 @@ const PDF = {
     const originalTitle = document.title;
 
     const printTitle = pdfFileName();
-    document.title = printTitle;
     document.head.innerHTML = printStyles;
     document.body.innerHTML = printContent;
+    document.title = printTitle;
 
     const restore = () => {
       document.head.innerHTML = originalHead;
