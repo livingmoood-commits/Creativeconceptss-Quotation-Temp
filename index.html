@@ -113,6 +113,14 @@ textarea{resize:vertical;line-height:1.65;}
 .btn-danger{background:#dc3545;color:#fff;}
 .btn-full{width:100%;}
 
+.float-nav{position:fixed;left:16px;bottom:26px;display:flex;flex-direction:column;gap:10px;z-index:970;}
+.float-btn{width:46px;height:46px;border-radius:50%;background:var(--dark);color:var(--gold-l);border:none;
+  font-size:19px;font-weight:700;box-shadow:var(--shadow);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .1s;}
+.float-btn:hover{background:var(--gold);}
+.float-btn:active{transform:scale(.93);}
+@media print{ .float-nav{ display:none !important; } }
+
 .steps{display:flex;margin-bottom:24px;border-radius:8px;overflow:hidden;box-shadow:var(--shadow);}
 .step{flex:1;text-align:center;padding:11px 6px;font-size:12px;font-weight:700;color:var(--mid);background:var(--paper);border-bottom:3px solid var(--border);cursor:default;transition:all .2s;}
 .step.active{color:var(--gold);border-color:var(--gold);}
@@ -489,6 +497,12 @@ body.gs-multi .q-tbl td.gs-selected{background:rgba(44,123,201,.14);}
 
 </div><!-- /shell -->
 
+<!-- floating نافبار: طلوع أول الصفحة / نزول للمعاينة -->
+<div class="float-nav" id="float-nav" style="display:none;">
+  <button type="button" class="float-btn" onclick="scrollToTop()" title="أول الصفحة">↑</button>
+  <button type="button" class="float-btn" onclick="scrollToPreview()" title="نزول للمعاينة">↓</button>
+</div>
+
 <script>
 
 /* ─── helpers ─── */
@@ -505,6 +519,22 @@ function alert_(id,type,msg){
   const el=$(id); el.className='alert alert-'+(type==='ok'?'ok':'err');
   el.textContent=msg; el.style.display='block';
   setTimeout(()=>el.style.display='none',4000);
+}
+
+/* ─── floating nav: طلوع أول الصفحة / نزول للمعاينة ─── */
+function scrollToTop(){
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+function scrollToPreview(){
+  const activePage = document.querySelector('.page.active');
+  // في صفحة التحرير: انزل لشريط الأزرار اللي فيه "معاينة وطباعة"
+  // في صفحة المعاينة (أو أي صفحة تانية): انزل لآخر الصفحة
+  const target = activePage ? activePage.querySelector('.action-bar') : null;
+  if(target){
+    target.scrollIntoView({ behavior:'smooth', block:'end' });
+  } else {
+    window.scrollTo({ top:document.body.scrollHeight, behavior:'smooth' });
+  }
 }
 
 /* ─── Confirm modal ─── */
@@ -526,6 +556,97 @@ function closeMailModal(){ $('mail-modal').classList.remove('open'); }
 let STATE = { customer: null, categories: [] };
 
 function dollar(){ return $('b-dollar')?.value || $('inp-dollar')?.value || CFG.defaultDollar; }
+
+/* ─── حفظ استمراري: أي ريلود في الصفحة يرجعك لنفس المكان (نفس الصفحة/الكوتيشن/سكرول) ─── */
+const LS_STATE_KEY = 'ccApp_lastState_v1';
+
+function currentPageId(){
+  const el = document.querySelector('.page.active');
+  return el ? el.id : 'pg-home';
+}
+
+function persistState(){
+  try{
+    const data = {
+      page: currentPageId(),
+      customer: STATE.customer,
+      categories: STATE.categories,
+      scrollY: window.scrollY
+    };
+    localStorage.setItem(LS_STATE_KEY, JSON.stringify(data));
+  }catch(e){ /* تجاهل (مساحة التخزين ممتلئة أو غير متاحة) */ }
+}
+
+function restoreState(){
+  let raw = null;
+  try{ raw = localStorage.getItem(LS_STATE_KEY); }catch(e){}
+  let data = null;
+  if(raw){ try{ data = JSON.parse(raw); }catch(e){ data = null; } }
+
+  if(!data || !data.customer || data.page === 'pg-home'){
+    API.listCustomers();
+    return;
+  }
+
+  STATE.customer   = data.customer;
+  STATE.categories = data.categories || [];
+  if($('b-engineer')) $('b-engineer').value = STATE.customer.engineer || '';
+  if($('b-address'))  $('b-address').value  = STATE.customer.address  || '';
+  if($('b-date'))      $('b-date').value    = UI.safeIsoDate(STATE.customer.date);
+
+  CAT.renderChips();
+  CAT.render();
+
+  if(data.page === 'pg-preview'){ UI.showPreview(); } else { UI.goEditor(); }
+
+  if(typeof data.scrollY === 'number'){
+    setTimeout(()=>window.scrollTo(0, data.scrollY), 60);
+  }
+  API.listCustomers(); // نجهز قائمة العملاء في الخلفية لو رجع للرئيسية بعدين
+}
+
+let _scrollSaveT = null;
+window.addEventListener('scroll', ()=>{
+  clearTimeout(_scrollSaveT);
+  _scrollSaveT = setTimeout(persistState, 250);
+});
+
+/* ─── Ctrl/Cmd + Z: تراجع عادي عن آخر تعديل (إضافة/حذف/تعديل قسم أو جزء أو بند) ─── */
+const HISTORY = { stack: [], limit: 80, suspend: false };
+
+function pushHistory(){
+  if(HISTORY.suspend) return;
+  try{
+    HISTORY.stack.push(JSON.stringify({ customer: STATE.customer, categories: STATE.categories }));
+    if(HISTORY.stack.length > HISTORY.limit) HISTORY.stack.shift();
+  }catch(e){}
+}
+
+function undo(){
+  if(!HISTORY.stack.length) return;
+  const snap = HISTORY.stack.pop();
+  let data;
+  try{ data = JSON.parse(snap); }catch(e){ return; }
+  HISTORY.suspend = true;
+  STATE.customer   = data.customer;
+  STATE.categories = data.categories || [];
+  if($('b-engineer')) $('b-engineer').value = STATE.customer?.engineer || '';
+  if($('b-address'))  $('b-address').value  = STATE.customer?.address  || '';
+  if($('b-date'))      $('b-date').value    = STATE.customer ? UI.safeIsoDate(STATE.customer.date) : '';
+  CAT.renderChips();
+  CAT.render();
+  persistState();
+  HISTORY.suspend = false;
+}
+
+document.addEventListener('keydown', (e)=>{
+  const ctrlOrCmd = e.ctrlKey || e.metaKey;
+  if(!ctrlOrCmd) return;
+  if((e.key==='z' || e.key==='Z') && !e.shiftKey){
+    e.preventDefault();
+    undo();
+  }
+});
 
 /* ─── categories / sections / rows engine ───
    category  -> sections[] (ordered, labeled أولاً / ثانياً / ثالثاً ...)
@@ -928,6 +1049,27 @@ const CAT = {
   }
 };
 
+/* كل دالة بتعدّل بيانات الكوتيشن بتاخد نسخة احتياطية من الحالة قبلها (لـ Ctrl+Z)
+   وبعدين تحفظ الحالة الجديدة (عشان الريلود يرجعك لنفس المكان) */
+(function(){
+  const MUTATORS = [
+    'addCategory','delCategory','setName','setEstimateTitle',
+    'addItemsSection','addCommissionSection','delSection','setSectionTitle',
+    'setSectionField','setSectionNum','setSectionBase','resetSectionBase',
+    'addRow','delRow','setRow','setRowNum','toggleNotesMerge'
+  ];
+  MUTATORS.forEach(name=>{
+    const orig = CAT[name];
+    if(typeof orig !== 'function') return;
+    CAT[name] = function(...args){
+      pushHistory();
+      const result = orig.apply(this, args);
+      persistState();
+      return result;
+    };
+  });
+})();
+
 /* ─── Multi-cell select + copy/paste ─────────────────────────────────────
    Works on every q-tbl (items table), across the whole table (description,
    unit, qty, price, notes — every .selectable <td>).
@@ -1236,7 +1378,7 @@ function buildPdfHtml(forPrint, forEmail=false){
   const grand = CAT.grand();
 
   let categoriesHtml = '';
-  STATE.categories.forEach((cat)=>{
+  STATE.categories.forEach((cat, catIdx)=>{
     let sectionsHtml = '';
     cat.sections.forEach((section, idx)=>{
       if(section.type==='items'){
@@ -1331,7 +1473,7 @@ function buildPdfHtml(forPrint, forEmail=false){
     sectionsHtml += `<div class="notes-box" style="margin-top:10px;margin-bottom:8px;font-weight:700;text-align:center;background:#46453F;color:#F1EFE8;">إجمالي المبلغ — ${h(cat.name)}: ${fmt(CAT.catTotal(cat))} جنيه</div>`;
 
     const estimateBar = cat.estimateTitle ? `<div class="estimate-title-bar">${h(cat.estimateTitle)}</div>` : '';
-    categoriesHtml += `<div class="cat-divider"></div><div class="cat-name-bar">${h(cat.name)}</div>${estimateBar}${sectionsHtml}`;
+    categoriesHtml += `<div class="cat-divider${catIdx===0?' cat-divider-first':''}"></div><div class="cat-name-bar">${h(cat.name)}</div>${estimateBar}${sectionsHtml}`;
   });
 
   let summaryHtml = '';
@@ -1403,6 +1545,14 @@ function buildPdfHtml(forPrint, forEmail=false){
 
     /* clear colored divider before every new category */
     .cat-divider{ height:3px; background:linear-gradient(90deg,transparent,#2C7BC9,transparent); margin:28px 0 0; border-radius:3px; }
+
+    /* كل قسم (category) يبدأ في صفحة منفصلة عند الطباعة / حفظ PDF، عشان الأقسام ميسيحوش على بعض */
+    @media print {
+      .cat-divider{ page-break-before:always; break-before:page; }
+      .cat-divider-first{ page-break-before:avoid; break-before:avoid; }
+      .cat-name-bar, .cat-title-bar, .estimate-title-bar, .comm-ord-label{ page-break-after:avoid; break-after:avoid; }
+      table.items tr, .comm-card, .notes-box{ page-break-inside:avoid; break-inside:avoid; }
+    }
 
     .estimate-title-bar{ background:#8C9AA6; color:#fff; padding:11px 14px; font-weight:700; font-size:14.5px;
       border-radius:6px; direction:rtl; text-align:center; margin-top:16px; letter-spacing:.3px; line-height:1.6; }
@@ -1512,7 +1662,13 @@ const UI = {
     const ok = /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s+'T00:00:00').getTime());
     return ok ? s : new Date().toISOString().slice(0,10);
   },
-  show(id){ document.querySelectorAll('.page').forEach(p=>p.classList.remove('active')); $(id).classList.add('active'); },
+  show(id){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    $(id).classList.add('active');
+    const fn = $('float-nav');
+    if(fn) fn.style.display = (id==='pg-home') ? 'none' : 'flex';
+    persistState();
+  },
   goHome(){   this.show('pg-home'); API.listCustomers(); },
   goEditor(){
     // ضمان إضافي: أي مرة نوصل لصفحة التحرير والتاريخ لسه فاضي، نحطله تاريخ انهارده تلقائيًا (وتقدر تعدله عادي)
@@ -1609,6 +1765,7 @@ const UI = {
     const today = new Date().toISOString().slice(0,10);
     STATE.customer = { name, engineer:eng, address:adr, date:today, originalName:name };
     STATE.categories = [];
+    HISTORY.stack = [];
     $('b-engineer').value = eng;
     $('b-address').value  = adr;
     $('b-date').value     = today;
@@ -1619,6 +1776,7 @@ const UI = {
   },
 
   openCustomer(c){
+    HISTORY.stack = [];
     STATE.customer = { ...c, date: this.safeIsoDate(c.date), originalName: c.name };
     $('b-engineer').value = c.engineer || '';
     $('b-address').value  = c.address  || '';
@@ -1728,6 +1886,13 @@ const API = {
 };
 
 /* ─── PDF / Print ─── */
+// اسم ملف الـ PDF المطلوب: "Creative Concepts Quotation - اسم المشروع"
+function pdfFileName(){
+  const c = STATE.customer || {};
+  const project = (c.address || c.engineer || c.name || '').trim();
+  return 'Creative Concepts Quotation' + (project ? ' - ' + project : '');
+}
+
 const PDF = {
   downloadAndPrint(){
     const html = buildPdfHtml(true, false);
@@ -1741,7 +1906,8 @@ const PDF = {
     const originalBody  = document.body.innerHTML;
     const originalTitle = document.title;
 
-    document.title = 'CreativeConcepts_Quote';
+    const printTitle = pdfFileName();
+    document.title = printTitle;
     document.head.innerHTML = printStyles;
     document.body.innerHTML = printContent;
 
@@ -1756,12 +1922,12 @@ const PDF = {
     window.print();
 
     setTimeout(() => {
-      if(document.title === 'CreativeConcepts_Quote') restore();
+      if(document.title === printTitle) restore();
     }, 3000);
   }
 };
 /* ─── init ─── */
-window.onload = () => API.listCustomers();
+window.onload = () => restoreState();
 </script>
 </body>
 </html>
